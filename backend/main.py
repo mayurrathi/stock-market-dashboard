@@ -24,6 +24,7 @@ from .monitor import monitor
 from .news_fetcher import news_fetcher
 from .stock_api import stock_api, NSE_STOCKS
 from .analyzer import analyzer, LARGE_CAP_STOCKS, MID_CAP_STOCKS, SMALL_CAP_STOCKS, PENNY_STOCKS
+from .llm import llm_service
 
 import logging
 import pytz
@@ -115,6 +116,40 @@ async def news_background_task():
             logger.error(f"Error in background news fetcher: {e}")
             await asyncio.sleep(300)  # Wait 5 minutes before retrying on error
 
+
+async def telegram_background_task():
+    """Background task to auto-fetch Telegram messages every 15 minutes"""
+    logger.info("Starting background Telegram fetcher task (15m interval)")
+    # Initial wait of 2 minutes to let the server settle
+    await asyncio.sleep(120)
+    
+    while True:
+        try:
+            logger.info("Scheduled background Telegram fetch starting...")
+            db = SessionLocal()
+            try:
+                sources = db.query(Source).filter(Source.active == True).all()
+                total_fetched = 0
+                for source in sources:
+                    try:
+                        fetched = await monitor.fetch_channel_history(source.channel_username, limit=20)
+                        total_fetched += fetched
+                        logger.info(f"Fetched {fetched} messages from {source.name}")
+                    except Exception as e:
+                        logger.error(f"Error fetching from {source.name}: {e}")
+                logger.info(f"Background Telegram fetch complete: {total_fetched} new messages from {len(sources)} sources")
+            finally:
+                db.close()
+            
+            # Wait 15 minutes
+            await asyncio.sleep(900)
+        except asyncio.CancelledError:
+            logger.info("Background Telegram fetcher task cancelled")
+            break
+        except Exception as e:
+            logger.error(f"Error in background Telegram fetcher: {e}")
+            await asyncio.sleep(300)  # Wait 5 minutes before retrying on error
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup and shutdown events"""
@@ -125,6 +160,9 @@ async def lifespan(app: FastAPI):
     
     # Start background news fetcher
     news_task = asyncio.create_task(news_background_task())
+    
+    # Start background Telegram fetcher (15 min interval)
+    telegram_task = asyncio.create_task(telegram_background_task())
     
     # Try to restore Telegram session
     db = SessionLocal()
@@ -151,6 +189,7 @@ async def lifespan(app: FastAPI):
     
     # Cancel background tasks
     news_task.cancel()
+    telegram_task.cancel()
     logger.info("Shutting down...")
 
 
@@ -217,28 +256,29 @@ async def health_check():
 
 # ============== All Star Picks (Top 10 Daily) ==============
 
-def get_next_market_close_ist() -> datetime:
-    """Get next 3:30 PM IST (market close) as UTC datetime"""
+def get_validity_expiry_ist() -> datetime:
+    """Get validity expiry (Next Market Open - 09:15 AM IST)"""
     import pytz
     ist = pytz.timezone('Asia/Kolkata')
     now_ist = datetime.now(ist)
     
-    # Set to 3:30 PM today
-    market_close = now_ist.replace(hour=15, minute=30, second=0, microsecond=0)
+    # Target: 09:15 AM
+    expiry = now_ist.replace(hour=9, minute=15, second=0, microsecond=0)
     
-    # If it's past 3:30 PM, use tomorrow's 3:30 PM
-    if now_ist >= market_close:
-        market_close += timedelta(days=1)
+    # If currently past 9:15 AM, expires TOMORROW at 9:15 AM
+    # This keeps data valid throughout the trading day and the evening/night research session
+    if now_ist >= expiry:
+        expiry += timedelta(days=1)
     
-    # Skip weekends
-    while market_close.weekday() >= 5:  # Saturday = 5, Sunday = 6
-        market_close += timedelta(days=1)
+    # Skip weekends (Saturday/Sunday -> Monday)
+    while expiry.weekday() >= 5:  # Saturday = 5, Sunday = 6
+        expiry += timedelta(days=1)
     
-    return market_close
+    return expiry
 
 @app.get("/api/allstar")
 async def get_allstar_picks(db: Session = Depends(get_db)):
-    """Get Top 10 All Star stock picks - refreshes at 3:30 PM IST next trading day"""
+    """Get Top 10 All Star stock picks - valid for the trading day"""
     import pytz
     ist = pytz.timezone('Asia/Kolkata')
     now = datetime.now(ist)
@@ -297,7 +337,7 @@ async def generate_allstar_picks(db: Session) -> list:
     
     ist = pytz.timezone('Asia/Kolkata')
     now = datetime.now(ist)
-    valid_until = get_next_market_close_ist()
+    valid_until = get_validity_expiry_ist()
     day_ago = now - timedelta(hours=24)
     
     # Step 1: Fetch recent data
@@ -496,7 +536,8 @@ async def _generate_pick_details(symbol: str, stock_data: dict, valid_until,
         "target_price": target_price,
         "stop_loss": stop_loss,
         "news_count": data["mentions"],
-        "valid_until": valid_until.isoformat()
+        "valid_until": valid_until.isoformat(),
+        "generated_at": datetime.now().isoformat()
     }
 
 
@@ -708,6 +749,58 @@ async def get_messages(
     }
 
 
+# ============== Live Signal Feed ==============
+
+@app.get("/api/signals/live")
+async def get_live_signals(
+    limit: int = 20,
+    db: Session = Depends(get_db)
+):
+    """Get recent Telegram signals with stock analysis for live feed"""
+    # Get messages from the last hour
+    one_hour_ago = datetime.now(IST) - timedelta(hours=1)
+    if one_hour_ago.tzinfo:
+        one_hour_ago = one_hour_ago.replace(tzinfo=None)
+    
+    messages = db.query(TelegramMessage).filter(
+        TelegramMessage.message_date >= one_hour_ago,
+        TelegramMessage.extracted_stocks != None
+    ).order_by(TelegramMessage.message_date.desc()).limit(limit).all()
+    
+    signals = []
+    for m in messages:
+        stocks = m.extracted_stocks if isinstance(m.extracted_stocks, list) else []
+        sentiment = m.sentiment or 'neutral'
+        
+        # Determine if this requires attention
+        requires_attention = False
+        action = 'HOLD'
+        
+        if sentiment in ['very_bullish', 'bullish']:
+            action = 'BUY' if sentiment == 'bullish' else 'STRONG BUY'
+            requires_attention = (sentiment == 'very_bullish')
+        elif sentiment in ['very_bearish', 'bearish']:
+            action = 'SELL' if sentiment == 'bearish' else 'AVOID'
+            requires_attention = (sentiment == 'very_bearish')
+        
+        signals.append({
+            "id": m.id,
+            "channel_name": m.channel_name,
+            "text": m.text[:200] + "..." if len(m.text) > 200 else m.text,
+            "stocks": stocks,
+            "sentiment": sentiment,
+            "action": action,
+            "requires_attention": requires_attention,
+            "timestamp": m.message_date.isoformat() if m.message_date else m.created_at.isoformat()
+        })
+    
+    return {
+        "count": len(signals),
+        "signals": signals,
+        "last_updated": datetime.now(IST).isoformat()
+    }
+
+
 # ============== Market News ==============
 
 @app.get("/api/news")
@@ -844,7 +937,7 @@ async def get_recommendations(
     if timeframe:
         query = query.filter(Recommendation.timeframe == timeframe)
     
-    recs = query.limit(50).all()
+    recs = query.limit(500).all()
     
     # Group by timeframe
     grouped = {}
@@ -875,6 +968,7 @@ async def get_stock_detail(symbol: str, db: Session = Depends(get_db)):
     from .analyzer import analyzer, LARGE_CAP_STOCKS, MID_CAP_STOCKS, SMALL_CAP_STOCKS, PENNY_STOCKS
     from datetime import datetime, timedelta
     import pytz
+    from .recommendation_engine import recommendation_engine
     
     symbol = symbol.upper()
     ist = pytz.timezone('Asia/Kolkata')
@@ -924,12 +1018,35 @@ async def get_stock_detail(symbol: str, db: Session = Depends(get_db)):
     # Calculate key ratios (simulated - in production would come from API)
     key_ratios = get_key_ratios(symbol, quote)
     
+    # Generate Advanced Recommendation
+    # Prepare historical data
+    formatted_history = chart_data.get('prices', []) if chart_data else []
+    
+    # Helper to convert news objects to dicts
+    news_items = [{
+        "title": n.title,
+        "sentiment": n.sentiment
+    } for n in news]
+    
+    # Helper for sentiment data
+    sentiment_data = {'bullish': 0, 'bearish': 0, 'neutral': 0}
+    # (Simple aggregation from news/messages would go here, for now passing basics)
+    
+    advanced_recommendation = await recommendation_engine.generate_recommendation(
+        symbol=symbol,
+        quote=quote,
+        historical_data=formatted_history,
+        fundamentals=key_ratios,
+        sentiment_data=sentiment_data,
+        news_items=news_items
+    )
+    
     # External links
     external_links = {
         "screener": f"https://www.screener.in/company/{symbol}/",
         "nse": f"https://www.nseindia.com/get-quotes/equity?symbol={symbol}",
-        "bse": f"https://www.bseindia.com/stock-share-price/{symbol.lower()}/",
-        "moneycontrol": f"https://www.moneycontrol.com/india/stockpricequote/{symbol.lower()}",
+        "bse": f"https://www.bseindia.com/stock-share-price/x/y/{symbol}/",
+        "moneycontrol": f"https://www.moneycontrol.com/stocksmarketsindia/?classic=true&q={symbol}",
         "tradingview": f"https://www.tradingview.com/symbols/NSE-{symbol}/"
     }
     
@@ -988,6 +1105,9 @@ async def get_stock_detail(symbol: str, db: Session = Depends(get_db)):
         
         # External links
         "external_links": external_links,
+        
+        # Advanced AI Recommendation
+        "advanced_recommendation": advanced_recommendation,
         
         "last_updated": now.isoformat()
     }
@@ -1127,8 +1247,10 @@ async def get_dashboard_stats(shortcut: Optional[str] = "today", db: Session = D
 
 @app.get("/api/watchlist")
 async def get_watchlist(db: Session = Depends(get_db)):
-    """Get all stocks in watchlist"""
-    stocks = db.query(WatchlistStock).filter(WatchlistStock.active == True).all()
+    """Get all stocks in watchlist, ordered by date added (newest first)"""
+    stocks = db.query(WatchlistStock).filter(
+        WatchlistStock.active == True
+    ).order_by(WatchlistStock.created_at.desc()).all()
     
     # Enrich with current prices
     results = []
@@ -1308,6 +1430,64 @@ async def remove_from_watchlist(symbol: str, db: Session = Depends(get_db)):
     return {"message": f"{symbol.upper()} removed from watchlist"}
 
 
+@app.post("/api/watchlist/refresh")
+async def refresh_watchlist_prices(db: Session = Depends(get_db)):
+    """Refresh all watchlist stock prices with live data"""
+    stocks = db.query(WatchlistStock).filter(WatchlistStock.active == True).all()
+    
+    updated = 0
+    results = []
+    
+    for stock in stocks:
+        try:
+            quote = await stock_api.get_stock_quote(stock.symbol)
+            if quote and quote.get('price'):
+                stock.current_price = quote.get('price')
+                updated += 1
+                results.append({
+                    "symbol": stock.symbol,
+                    "name": stock.name,
+                    "sector": stock.sector,
+                    "current_price": quote.get('price'),
+                    "target_price": stock.target_price,
+                    "stop_loss": stock.stop_loss,
+                    "notes": stock.notes,
+                    "id": stock.id
+                })
+            else:
+                # Keep existing data if quote fails
+                results.append({
+                    "symbol": stock.symbol,
+                    "name": stock.name,
+                    "sector": stock.sector,
+                    "current_price": stock.current_price,
+                    "target_price": stock.target_price,
+                    "stop_loss": stock.stop_loss,
+                    "notes": stock.notes,
+                    "id": stock.id
+                })
+        except Exception as e:
+            logger.warning(f"Failed to refresh price for {stock.symbol}: {e}")
+            results.append({
+                "symbol": stock.symbol,
+                "name": stock.name,
+                "sector": stock.sector,
+                "current_price": stock.current_price,
+                "target_price": stock.target_price,
+                "stop_loss": stock.stop_loss,
+                "notes": stock.notes,
+                "id": stock.id
+            })
+    
+    db.commit()
+    return {
+        "message": f"Refreshed {updated} of {len(stocks)} stocks",
+        "updated": updated,
+        "count": len(results),
+        "stocks": results
+    }
+
+
 # ============== Market Overview (News-Based, No Telegram Required) ==============
 
 @app.get("/api/market/overview")
@@ -1417,6 +1597,364 @@ async def analyze_market(db: Session = Depends(get_db)):
         "recommendations_count": len(recommendations),
         "message": "Market analysis complete. View recommendations in the Recommendations section."
     }
+
+
+# ============== Screener API ==============
+
+from .screener import stock_screener
+from .expert_engine import expert_engine
+
+@app.get("/api/screens")
+async def get_all_screens():
+    """Get all available stock screens (50+)"""
+    screens = stock_screener.get_all_screens()
+    categories = stock_screener.get_screens_by_category()
+    return {
+        "total": len(screens),
+        "screens": screens,
+        "categories": categories
+    }
+
+@app.get("/api/screens/{screen_id}/run")
+async def run_screen(screen_id: str, db: Session = Depends(get_db)):
+    """Run a specific stock screen and return matching stocks from all NSE/BSE stocks"""
+    # Fetch all stocks from database for full coverage
+    all_stocks = db.query(Stock).filter(Stock.is_active == True).all()
+    
+    # Build stock data dict from database + live fundamentals
+    stock_data = {}
+    for s in all_stocks:
+        # Get fundamental data if available (cached or simulated)
+        fundamentals = stock_api.get_fundamentals(s.symbol)
+        if fundamentals:
+            stock_data[s.symbol] = {
+                "pe": fundamentals.get("pe", 0),
+                "pb": fundamentals.get("pb", 0),
+                "roe": fundamentals.get("roe", 0),
+                "roce": fundamentals.get("roce", 0),
+                "de": fundamentals.get("de", 0),
+                "div_yield": fundamentals.get("div_yield", 0),
+                "mcap": s.cap_type + " Cap" if s.cap_type else "Mid Cap"
+            }
+    
+    # Run screen with full data
+    results = stock_screener.run_screen_with_data(screen_id, stock_data)
+    screen_info = stock_screener.screens.get(screen_id, {})
+    return {
+        "screen_id": screen_id,
+        "screen_name": screen_info.get("name", screen_id),
+        "description": screen_info.get("description", ""),
+        "category": screen_info.get("category", ""),
+        "matches": len(results),
+        "stocks": results,
+        "total_scanned": len(stock_data)
+    }
+
+
+# ============== Expert Engine API ==============
+
+@app.get("/api/recommendation/{symbol}")
+async def get_expert_recommendation(symbol: str, db: Session = Depends(get_db)):
+    """Get expert recommendation for a specific stock"""
+    symbol = symbol.upper().strip()
+    
+    # Get fundamentals from screener data or database
+    from .screener import STOCK_DATA
+    fundamentals = STOCK_DATA.get(symbol, {
+        "pe": 0,
+        "pb": 0,
+        "roe": 0,
+        "roce": 0,
+        "de": 0,
+        "div_yield": 0,
+        "mcap": "Unknown"
+    })
+    
+    # Get sentiment data from recent news
+    now = datetime.now()
+    day_ago = now - timedelta(hours=24)
+    news = db.query(MarketNews).filter(
+        MarketNews.extracted_stocks.contains(symbol),
+        MarketNews.published_at >= day_ago
+    ).all()
+    
+    sentiment_data = {
+        "bullish": sum(1 for n in news if n.sentiment == "positive"),
+        "bearish": sum(1 for n in news if n.sentiment == "negative"),
+        "neutral": sum(1 for n in news if n.sentiment == "neutral"),
+        "mentions": len(news)
+    }
+    
+    # Get price data
+    price_data = None
+    try:
+        quote = await stock_api.get_stock_quote(symbol)
+        if quote:
+            price_data = {
+                "current_price": quote.get("current_price", 0),
+                "change_percent": quote.get("change_percent", 0)
+            }
+    except Exception:
+        pass
+    
+    # Calculate recommendation
+    recommendation = expert_engine.calculate_recommendation(
+        symbol=symbol,
+        fundamentals=fundamentals,
+        sentiment_data=sentiment_data,
+        price_data=price_data
+    )
+    
+    return {
+        "symbol": symbol,
+        "recommendation": recommendation,
+        "fundamentals": fundamentals,
+        "sentiment": sentiment_data
+    }
+
+
+# ============== Global Search API ==============
+
+@app.get("/api/search")
+async def global_search(q: str = Query(..., min_length=1), limit: int = 10, db: Session = Depends(get_db)):
+    """Global instant stock search"""
+    query = q.upper().strip()
+    
+    results = []
+    
+    # Search in NSE stocks (list of dicts with symbol, name, sector)
+    for stock in NSE_STOCKS:
+        symbol = stock["symbol"]
+        name = stock["name"]
+        sector = stock.get("sector", SECTOR_MAPPING.get(symbol, "General"))
+        if query in symbol or query.lower() in name.lower():
+            results.append({
+                "symbol": symbol,
+                "name": name,
+                "sector": sector,
+                "type": "stock"
+            })
+            if len(results) >= limit:
+                break
+    
+    # Also search in database stocks if we have less than limit
+    if len(results) < limit:
+        db_stocks = db.query(Stock).filter(
+            (Stock.symbol.ilike(f"%{query}%")) | 
+            (Stock.name.ilike(f"%{query}%"))
+        ).limit(limit - len(results)).all()
+        
+        for stock in db_stocks:
+            if stock.symbol not in [r["symbol"] for r in results]:
+                results.append({
+                    "symbol": stock.symbol,
+                    "name": stock.name or stock.symbol,
+                    "sector": stock.sector or "General",
+                    "type": "stock"
+                })
+    
+    return {
+        "query": q,
+        "results": results[:limit],
+        "total": len(results)
+    }
+
+
+# ============== Research Console API ==============
+
+@app.get("/api/research/{symbol}")
+async def get_research_data(symbol: str, db: Session = Depends(get_db)):
+    """Get comprehensive research data for a stock"""
+    symbol = symbol.upper().strip()
+    
+    # Get stock quote (price data)
+    stock_quote = await stock_api.get_stock_quote(symbol)
+    
+    # Get stock info from NSE_STOCKS list
+    nse_stock_info = next((s for s in NSE_STOCKS if s["symbol"] == symbol), None)
+    
+    # Get expert recommendation
+    from .screener import STOCK_DATA
+    fundamentals = STOCK_DATA.get(symbol, {
+        "pe": stock_quote.get("pe_ratio", 0) if stock_quote else 0,
+        "pb": stock_quote.get("pb_ratio", 0) if stock_quote else 0,
+        "roe": 15,  # Default estimate
+        "roce": 18,
+        "de": 0.5,
+        "div_yield": 1.0,
+        "mcap": "Large Cap"
+    })
+    
+    # Get sentiment from news
+    now = datetime.now()
+    week_ago = now - timedelta(days=7)
+    news = db.query(MarketNews).filter(
+        MarketNews.extracted_stocks.contains(symbol),
+        MarketNews.published_at >= week_ago
+    ).order_by(MarketNews.published_at.desc()).limit(10).all()
+    
+    sentiment_data = {
+        "bullish": sum(1 for n in news if n.sentiment == "positive"),
+        "bearish": sum(1 for n in news if n.sentiment == "negative"),
+        "neutral": sum(1 for n in news if n.sentiment == "neutral"),
+        "mentions": len(news)
+    }
+    
+    # Get recommendation
+    recommendation = expert_engine.calculate_recommendation(
+        symbol=symbol,
+        fundamentals=fundamentals,
+        sentiment_data=sentiment_data,
+        price_data={"change_percent": stock_quote.get("change_percent", 0)} if stock_quote else None
+    )
+    
+    # Get related stocks (same sector) - NSE_STOCKS is a list of dicts
+    sector = nse_stock_info.get("sector") if nse_stock_info else SECTOR_MAPPING.get(symbol, "General")
+    stock_name = nse_stock_info.get("name", symbol) if nse_stock_info else symbol
+    related = [s["symbol"] for s in NSE_STOCKS if s.get("sector") == sector and s["symbol"] != symbol][:5]
+    
+    # Format stock info for frontend (needs current_price)
+    formatted_stock_info = None
+    if stock_quote:
+        formatted_stock_info = stock_quote.copy()
+        formatted_stock_info["current_price"] = stock_quote.get("price")
+
+    return {
+        "symbol": symbol,
+        "name": stock_name,
+        "sector": sector,
+        "stock_info": formatted_stock_info,  # Return the formatted data
+        "fundamentals": fundamentals,
+        "expert_recommendation": recommendation,
+        "recent_news": [{
+            "title": n.title,
+            "source": n.source,
+            "sentiment": n.sentiment,
+            "published_at": n.published_at.isoformat() if n.published_at else None,
+            "link": n.link
+        } for n in news],
+        "related_stocks": related
+    }
+
+
+# ============== Gemini AI Config ==============
+
+class GeminiConfig(BaseModel):
+    api_key: str
+    model: str = "gemini-3.0-flash"
+
+@app.get("/api/gemini/config")
+async def get_gemini_config(db: Session = Depends(get_db)):
+    """Get current Gemini configuration"""
+    api_key = db.query(Config).filter(Config.key == "gemini_api_key").first()
+    model = db.query(Config).filter(Config.key == "gemini_model").first()
+    
+    return {
+        "has_key": bool(api_key and api_key.value),
+        "model": model.value if model else "gemini-3.0-flash"
+    }
+
+@app.post("/api/gemini/config")
+async def save_gemini_config(config: GeminiConfig, db: Session = Depends(get_db)):
+    """Save Gemini configuration"""
+    # Sanitize inputs
+    api_key = config.api_key.strip()
+    model_name = config.model.strip()
+    
+    # Save API key
+    existing_key = db.query(Config).filter(Config.key == "gemini_api_key").first()
+    if existing_key:
+        existing_key.value = api_key
+    else:
+        db.add(Config(key="gemini_api_key", value=api_key))
+    
+    # Save model
+    existing_model = db.query(Config).filter(Config.key == "gemini_model").first()
+    if existing_model:
+        existing_model.value = model_name
+    else:
+        db.add(Config(key="gemini_model", value=model_name))
+    
+    # Enable AI features by default when key is set
+    existing_ai = db.query(Config).filter(Config.key == "ai_features_enabled").first()
+    if not existing_ai:
+        db.add(Config(key="ai_features_enabled", value="true"))
+    elif existing_ai.value != "true":
+        existing_ai.value = "true"
+        
+    db.commit()
+    
+    # Reinitialize LLM service
+    llm_service.initialized = False
+    
+    return {"success": True, "message": "Gemini configuration saved successfully"}
+
+class ChatRequest(BaseModel):
+    message: str
+
+@app.post("/api/chat")
+async def chat_with_ai(request: ChatRequest, db: Session = Depends(get_db)):
+    """Handle chat requests with the AI assistant"""
+    # Check if AI is enabled
+    ai_status = db.query(Config).filter(Config.key == "ai_features_enabled").first()
+    if ai_status and ai_status.value != "true":
+        return {"response": "AI features are currently disabled. Enable them in the sidebar."}
+        
+    response = await llm_service.chat(request.message)
+    return {"response": response}
+
+# ============== System Controls ==============
+
+class SystemStatus(BaseModel):
+    system_monitoring: bool
+    ai_features: bool
+
+@app.get("/api/stocks/list")
+async def get_supported_stocks():
+    """Get list of supported stocks for autocomplete"""
+    from .stock_api import NSE_STOCKS
+    # Just return simple list of {symbol, name}
+    return [{"symbol": s["symbol"], "name": s["name"]} for s in NSE_STOCKS]
+
+
+@app.get("/api/system/status")
+async def get_system_status(db: Session = Depends(get_db)):
+    """Get status of system monitoring and AI features"""
+    sys_mon = db.query(Config).filter(Config.key == "system_monitoring_enabled").first()
+    ai_feat = db.query(Config).filter(Config.key == "ai_features_enabled").first()
+    
+    return {
+        "system_monitoring": sys_mon.value == "true" if sys_mon else True,
+        "ai_features": ai_feat.value == "true" if ai_feat else False  # Default to False if not set
+    }
+
+@app.post("/api/system/control")
+async def update_system_control(status: SystemStatus, db: Session = Depends(get_db)):
+    """Update system status"""
+    # System Monitoring
+    sys_mon = db.query(Config).filter(Config.key == "system_monitoring_enabled").first()
+    if sys_mon:
+        sys_mon.value = "true" if status.system_monitoring else "false"
+    else:
+        db.add(Config(key="system_monitoring_enabled", value="true" if status.system_monitoring else "false"))
+        
+    # AI Features
+    ai_feat = db.query(Config).filter(Config.key == "ai_features_enabled").first()
+    if ai_feat:
+        ai_feat.value = "true" if status.ai_features else "false"
+    else:
+        db.add(Config(key="ai_features_enabled", value="true" if status.ai_features else "false"))
+        
+    db.commit()
+    
+    # Update global background task states
+    if status.system_monitoring:
+        if not monitor.is_running:
+            # Re-start monitoring if needed (this simplifies to just flagging for now)
+            # In a real app we might need to trigger starts, but our background tasks check this flag
+            pass
+    
+    return {"success": True, "status": status}
 
 
 # ============== Static Files ==============

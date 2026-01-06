@@ -113,12 +113,26 @@ class TelegramMonitor:
 
         @self.client.on(events.NewMessage(chats=chat_ids_or_usernames))
         async def handler(event):
+            # Check if system monitoring is enabled
+            db = SessionLocal()
+            try:
+                sys_mon = db.query(Config).filter(Config.key == "system_monitoring_enabled").first()
+                if sys_mon and sys_mon.value == "false":
+                    return # Skip processing if disabled
+            finally:
+                db.close()
+                
             await self.process_message(event)
 
         logger.info(f"Telegram monitoring started for {len(chat_ids_or_usernames)} channels...")
 
     async def process_message(self, event):
-        """Process incoming Telegram messages"""
+        """Process incoming Telegram messages with AI analysis"""
+        from .llm import llm_service
+        from .stock_api import stock_api
+        from .recommendation_engine import recommendation_engine
+        from .technical_analysis import technical_analyzer
+        
         text = event.message.text
         if not text:
             return
@@ -143,6 +157,14 @@ class TelegramMonitor:
                 logger.debug(f"Duplicate message {message_id} from {channel_name}")
                 return
             
+            # Extract stocks using AI if available, else fallback to regex
+            if llm_service.is_available():
+                stocks = await llm_service.extract_stocks_from_message(text)
+                logger.info(f"AI extracted stocks: {stocks}")
+            else:
+                stocks = analyzer.extract_stocks(text)
+                logger.info(f"Regex extracted stocks: {stocks}")
+            
             # Store the message
             new_message = TelegramMessage(
                 message_id=message_id,
@@ -150,6 +172,7 @@ class TelegramMonitor:
                 channel_name=channel_name,
                 text=text,
                 urls=urls if urls else None,
+                extracted_stocks=stocks if stocks else None,
                 processed=False,
                 message_date=event.message.date.astimezone(IST)
             )
@@ -162,24 +185,63 @@ class TelegramMonitor:
             db.commit()
             logger.info(f"Stored message from {channel_name}")
             
-            # Real-time Analysis: Extract stocks and generate recommendations
-            stocks = analyzer.extract_stocks(text)
+            # Deep Research + AI Recommendation for each stock
             if stocks:
-                logger.info(f"Found stocks in new message: {stocks}. Generating recommendations...")
-                # Run analyzer for these specific stocks
+                logger.info(f"Starting deep research for stocks: {stocks}")
                 for stock in stocks:
-                    sentiment, confidence = analyzer.analyze_sentiment(text)
-                    # We store a lightweight recommendation immediately
-                    rec = Recommendation(
-                        symbol=stock,
-                        timeframe="next_day",  # Default for real-time alerts
-                        action="BUY" if sentiment == "bullish" else "SELL" if sentiment == "bearish" else "HOLD",
-                        confidence=confidence * 100,
-                        reasoning=f"Real-time analysis from {channel_name}: {text[:150]}..."
-                    )
-                    db.add(rec)
+                    try:
+                        # Step 1: Get fundamentals
+                        fundamentals = stock_api.get_fundamentals(stock)
+                        
+                        # Step 2: Get technical analysis
+                        history = await stock_api.get_stock_history(stock)
+                        technical_data = technical_analyzer.analyze(history)
+                        
+                        # Step 3: Get existing engine recommendation
+                        sentiment, confidence = analyzer.analyze_sentiment(text)
+                        existing_rec = {
+                            "action": "BUY" if sentiment == "bullish" else "SELL" if sentiment == "bearish" else "HOLD",
+                            "confidence": confidence * 100
+                        }
+                        
+                        # Step 4: Try AI synthesis if available
+                        if llm_service.is_available():
+                            ai_rec = await llm_service.synthesize_recommendation(
+                                symbol=stock,
+                                message_text=text,
+                                fundamentals=fundamentals or {},
+                                recommendation_data=existing_rec,
+                                technical_analysis=technical_data, # Pass technical data
+                                news_context=""
+                            )
+                            if ai_rec:
+                                rec = Recommendation(
+                                    symbol=stock,
+                                    timeframe="next_day",
+                                    action=ai_rec.get("action", "HOLD"),
+                                    confidence=ai_rec.get("confidence", 50),
+                                    reasoning=ai_rec.get("summary", f"AI analysis from {channel_name}")
+                                )
+                                db.add(rec)
+                                logger.info(f"AI recommendation for {stock}: {ai_rec.get('action')}")
+                                continue
+                        
+                        # Fallback: Use existing logic
+                        rec = Recommendation(
+                            symbol=stock,
+                            timeframe="next_day",
+                            action=existing_rec["action"],
+                            confidence=existing_rec["confidence"],
+                            reasoning=f"Real-time analysis from {channel_name}: {text[:150]}..."
+                        )
+                        db.add(rec)
+                        
+                    except Exception as e:
+                        logger.error(f"Error processing stock {stock}: {e}")
+                        continue
+                
                 db.commit()
-                logger.info(f"Generated {len(stocks)} real-time recommendations")
+                logger.info(f"Generated recommendations for {len(stocks)} stocks")
             
         except Exception as e:
             logger.error(f"Error processing/analyzing message: {e}")

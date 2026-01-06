@@ -181,6 +181,41 @@ class StockAPI:
         
         return None
     
+    
+    async def get_stock_history(self, symbol: str, period: str = "3mo", interval: str = "1d") -> Optional[Dict]:
+        """Fetch historical stock data for technical analysis"""
+        try:
+            # Clean symbol
+            symbol = symbol.replace('.NS', '').replace('.BO', '')
+            
+            async with httpx.AsyncClient(timeout=10) as client:
+                # Try NSE first
+                url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}.NS?range={period}&interval={interval}"
+                response = await client.get(url, headers={'User-Agent': 'Mozilla/5.0'})
+                
+                if response.status_code != 200:
+                    # Fallback to BSE
+                    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}.BO?range={period}&interval={interval}"
+                    response = await client.get(url, headers={'User-Agent': 'Mozilla/5.0'})
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    result = data.get('chart', {}).get('result', [{}])[0]
+                    indicators = result.get('indicators', {}).get('quote', [{}])[0]
+                    timestamp = result.get('timestamp', [])
+                    
+                    return {
+                        'timestamp': timestamp,
+                        'open': indicators.get('open', []),
+                        'high': indicators.get('high', []),
+                        'low': indicators.get('low', []),
+                        'close': indicators.get('close', []),
+                        'volume': indicators.get('volume', [])
+                    }
+        except Exception as e:
+            logger.error(f"Error fetching history for {symbol}: {e}")
+            return None
+
     async def get_multiple_quotes(self, symbols: List[str]) -> List[Dict]:
         """Get quotes for multiple symbols"""
         tasks = [self.get_stock_quote(symbol) for symbol in symbols]

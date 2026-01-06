@@ -10,6 +10,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap"
         rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 
@@ -47,15 +48,22 @@
                     <span class="nav-icon">🎯</span>
                     Recommendations
                 </a>
-                <a href="#" class="nav-item" data-section="sources">
-                    <span class="nav-icon">📡</span>
-                    Sources
-                </a>
-                <a href="#" class="nav-item" data-section="settings">
-                    <span class="nav-icon">⚙️</span>
-                    Settings
-                </a>
+                <div class="nav-item" data-section="allstar">
+                    <span class="material-icons nav-icon-material">star</span>
+                    <span>All Star Picks</span>
+                </div>
+                <div class="nav-item" data-section="settings">
+                    <span class="material-icons nav-icon-material">settings</span>
+                    <span>Settings</span>
+                </div>
             </nav>
+
+            <div class="sidebar-footer">
+                <!-- System Controls moved to Settings Page -->
+                <div class="user-info" style="display: none;">
+                    <!-- Hidden as per user request -->
+                </div>
+            </div>
 
             <div class="telegram-status" id="telegramStatus">
                 <span class="status-dot disconnected"></span>
@@ -68,15 +76,29 @@
             <!-- Header with Calendar Filter -->
             <header class="header">
                 <div class="header-left">
-                    <h2 id="sectionTitle">Dashboard</h2>
+                    <h2 id="pageGreeting">Hello, Trader 👋</h2>
+                    <p class="greeting-subtitle">What would you like to analyze today?</p>
                 </div>
 
                 <div class="header-center">
-                    <!-- Filters moved to specific sections -->
+                    <!-- Unified Search & Command Bar -->
+                    <div class="omnibar-container" id="omnibarContainer">
+                        <span class="omnibar-icon">✨</span>
+                        <input type="text" class="omnibar-input" id="omnibarInput"
+                            placeholder="Ask any question or type a stock symbol (e.g. RELIANCE)..." autocomplete="off"
+                            list="stockSuggestions">
+                        <datalist id="stockSuggestions">
+                            <!-- Populated by JS -->
+                        </datalist>
+                        <div class="omnibar-actions">
+                            <span class="omnibar-shortcut">⌘K</span>
+                        </div>
+                        <div class="search-results-dropdown" id="omnibarResults"></div>
+                    </div>
                 </div>
 
                 <div class="header-right">
-                    <!-- Date range moved to specific sections -->
+                    <!-- Icons removed as per request -->
                 </div>
             </header>
 
@@ -121,6 +143,27 @@
                         </div>
                     </div>
                     <button class="scroll-btn right" onclick="scrollContainer('indicesRow', 400)">›</button>
+                </div>
+
+                <!-- 📡 Live Signal Feed -->
+                <div class="live-signal-section" style="margin-bottom: 24px;">
+                    <div class="section-header"
+                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                        <h3 style="margin: 0; display: flex; align-items: center; gap: 8px;">
+                            📡 Live Signal Feed
+                            <span id="liveSignalCount"
+                                style="font-size: 12px; background: var(--accent-primary); color: #fff; padding: 2px 8px; border-radius: 99px;">0</span>
+                        </h3>
+                        <span id="liveSignalUpdated" style="font-size: 11px; color: var(--text-muted);">--</span>
+                    </div>
+                    <div id="liveSignalFeed" class="live-signal-feed"
+                        style="display: flex; gap: 12px; overflow-x: auto; padding-bottom: 8px;">
+                        <div class="empty-state"
+                            style="flex: 1; text-align: center; padding: 24px; color: var(--text-muted);">
+                            <span>⏳</span>
+                            <p>Waiting for signals...</p>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Stats Cards -->
@@ -273,74 +316,6 @@
                     </div>
                 </div>
 
-                <!-- Stock Detail Modal (Universal) -->
-                <div class="modal hidden" id="stockDetailModal">
-                    <div class="modal-content stock-detail-modal">
-                        <div class="stock-detail-header">
-                            <div class="stock-title-block">
-                                <h3 id="stockDetailTitle">Loading...</h3>
-                                <span class="stock-category-badge" id="stockCategoryBadge"></span>
-                            </div>
-                            <button type="button" class="modal-close-btn" id="closeStockDetail">×</button>
-                        </div>
-
-                        <div class="stock-detail-body">
-                            <!-- Price Overview -->
-                            <div class="stock-price-overview" id="stockPriceOverview">
-                                <div class="current-price-block">
-                                    <span class="price-label">Current Price</span>
-                                    <span class="price-value" id="stockCurrentPrice">--</span>
-                                    <span class="price-change" id="stockPriceChange">--</span>
-                                </div>
-                                <div class="price-range">
-                                    <div><span>Day Low</span><strong id="stockDayLow">--</strong></div>
-                                    <div><span>Day High</span><strong id="stockDayHigh">--</strong></div>
-                                    <div><span>Prev Close</span><strong id="stockPrevClose">--</strong></div>
-                                </div>
-                            </div>
-
-                            <!-- Target & Stop Loss -->
-                            <div class="stock-targets" id="stockTargets">
-                                <div class="target-card target">
-                                    <span class="target-label">🎯 Target</span>
-                                    <span class="target-value" id="stockTarget">--</span>
-                                    <span class="target-percent" id="stockTargetPercent">--</span>
-                                </div>
-                                <div class="target-card stoploss">
-                                    <span class="target-label">🛑 Stop Loss</span>
-                                    <span class="target-value" id="stockStopLoss">--</span>
-                                    <span class="target-percent" id="stockSLPercent">--</span>
-                                </div>
-                            </div>
-
-                            <!-- Price Chart -->
-                            <div class="stock-chart-container">
-                                <h4>📈 Price History (30 Days)</h4>
-                                <canvas id="stockChart" height="150"></canvas>
-                            </div>
-
-                            <!-- Key Ratios -->
-                            <div class="stock-ratios">
-                                <h4>📊 Key Ratios</h4>
-                                <div class="ratios-grid" id="stockRatiosGrid">
-                                    <!-- Populated by JS -->
-                                </div>
-                            </div>
-
-                            <!-- Recommendations -->
-                            <div class="stock-recommendations" id="stockRecsSection">
-                                <h4>💡 AI Recommendations</h4>
-                                <div class="recs-list" id="stockRecsList"></div>
-                            </div>
-
-                            <!-- External Links -->
-                            <div class="stock-external-links">
-                                <h4>🔗 Research Links</h4>
-                                <div class="links-row" id="stockExternalLinks"></div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
             </section>
 
             <!-- Messages Section -->
@@ -453,6 +428,271 @@
                 </div>
             </section>
 
+            <!-- Stock Screener Section -->
+            <section class="section hidden" id="screener-section">
+                <div class="section-header">
+                    <div class="header-main-group">
+                        <h3>📋 Stock Screener</h3>
+                        <span class="screen-count" id="screenCount">50+ Screens</span>
+                    </div>
+                </div>
+
+                <div class="screener-controls">
+                    <div class="screener-dropdown">
+                        <select class="screener-select" id="screenerSelect">
+                            <option value="">-- Select a Screen --</option>
+                            <optgroup label="📊 Value Screens">
+                                <option value="low_pe">Low P/E Stocks</option>
+                                <option value="low_pb">Low P/B Stocks (Book Value)</option>
+                                <option value="low_pe_high_roe">Low PE + High ROE</option>
+                                <option value="graham_number">Graham Number Undervalued</option>
+                                <option value="high_dividend_yield">High Dividend Yield (>2%)</option>
+                                <option value="dividend_aristocrats">Dividend Aristocrats</option>
+                                <option value="peg_undervalued">PEG Ratio < 1</option>
+                                <option value="deep_value">Deep Value Picks</option>
+                                <option value="ev_ebitda_low">Low EV/EBITDA</option>
+                                <option value="contrarian_value">Contrarian Value Play</option>
+                            </optgroup>
+                            <optgroup label="🚀 Growth Screens">
+                                <option value="garp">Growth at Reasonable Price (GARP)</option>
+                                <option value="high_roe">High ROE Champions</option>
+                                <option value="high_roce">High ROCE Stars</option>
+                                <option value="profit_growth">Profit Growth Leaders</option>
+                                <option value="compounders">Quality Compounders</option>
+                                <option value="small_cap_growth">Small Cap Growth</option>
+                                <option value="emerging_blue_chips">Emerging Blue Chips</option>
+                                <option value="earnings_momentum">Earnings Momentum</option>
+                            </optgroup>
+                            <optgroup label="💎 Quality Screens">
+                                <option value="debt_free">Debt-Free Gems</option>
+                                <option value="cash_rich">Cash Rich Companies</option>
+                                <option value="consistent_dividend">Consistent Dividend Payers</option>
+                                <option value="blue_chip">Blue Chip Stalwarts</option>
+                                <option value="moat_companies">Economic Moat</option>
+                                <option value="management_quality">Management Quality</option>
+                                <option value="capital_efficient">Capital Efficient</option>
+                                <option value="profit_machines">Profit Machines</option>
+                            </optgroup>
+                            <optgroup label="📈 Technical Screens">
+                                <option value="golden_cross">Golden Cross (MA50/200)</option>
+                                <option value="death_cross_avoid">Avoid Death Cross</option>
+                                <option value="rsi_oversold">RSI Oversold (<30)< /option>
+                                <option value="rsi_overbought">RSI Overbought (>70)</option>
+                                <option value="breakout_52w_high">52-Week High Breakout</option>
+                                <option value="near_52w_low">Near 52-Week Low</option>
+                                <option value="high_volume_surge">Volume Surge</option>
+                                <option value="price_momentum">Price Momentum Leaders</option>
+                            </optgroup>
+                            <optgroup label="🎯 Thematic Screens">
+                                <option value="fii_favorites">FII Favorites</option>
+                                <option value="dii_accumulation">DII Accumulation</option>
+                                <option value="it_sector">IT Sector Champions</option>
+                                <option value="banking_finance">Banking & Finance</option>
+                                <option value="fmcg_consumer">FMCG & Consumer</option>
+                                <option value="infrastructure_play">Infrastructure Play</option>
+                                <option value="defense_psu">Defense & PSU</option>
+                                <option value="ev_green_energy">EV & Green Energy</option>
+                                <option value="rural_consumption">Rural Consumption Play</option>
+                                <option value="export_oriented">Export Oriented</option>
+                            </optgroup>
+                            <optgroup label="🛡️ Safety Screens">
+                                <option value="low_beta">Low Beta Defensive</option>
+                                <option value="recession_proof">Recession Proof</option>
+                                <option value="high_interest_coverage">High Interest Coverage</option>
+                                <option value="stable_earnings">Stable Earnings</option>
+                                <option value="low_volatility">Low Volatility Portfolio</option>
+                                <option value="safe_haven">Safe Haven Picks</option>
+                            </optgroup>
+                        </select>
+                    </div>
+                    <button class="btn btn-primary" id="runScreenBtn">🔍 Run Screen</button>
+                </div>
+
+                <div class="screen-info hidden" id="screenInfo">
+                    <h4 id="screenName">Screen Name</h4>
+                    <p id="screenDescription">Description</p>
+                    <span class="match-count" id="matchCount">0 matches</span>
+                </div>
+
+                <div class="screener-results" id="screenerResults">
+                    <div class="empty-state">
+                        <span>📋</span>
+                        <p>Select a screen from the dropdown above to find matching stocks</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Research Console Section -->
+            <section class="section hidden" id="research-section">
+                <div class="section-header">
+                    <div class="header-main-group">
+                        <h3>🔬 Research Console</h3>
+                    </div>
+                    <div class="research-search">
+                        <input type="text" class="research-search-input" id="researchSearchInput"
+                            placeholder="Enter stock symbol (e.g., RELIANCE)">
+                        <button class="btn btn-primary" id="researchBtn">Analyze</button>
+                    </div>
+                </div>
+
+                <div class="research-console hidden" id="researchConsole">
+                    <!-- Left: Main Analysis -->
+                    <div class="research-main">
+                        <!-- Stock Header -->
+                        <div class="research-card research-header-card">
+                            <div class="research-stock-header">
+                                <div>
+                                    <h2 id="researchSymbol">RELIANCE</h2>
+                                    <p id="researchName">Reliance Industries Ltd</p>
+                                    <span class="sector-badge" id="researchSector">Energy</span>
+                                </div>
+                                <div class="research-price">
+                                    <span class="price" id="researchPrice">₹0</span>
+                                    <span class="change" id="researchChange">0%</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Recommendation Gauge -->
+                        <div class="research-card">
+                            <h4>📊 Expert Recommendation</h4>
+                            <div class="gauge-container" id="recommendationGauge">
+                                <svg class="gauge-svg" viewBox="0 0 200 120">
+                                    <path class="gauge-bg" d="M 20 100 A 80 80 0 0 1 180 100" />
+                                    <path class="gauge-fill hold" id="gaugeFill" d="M 20 100 A 80 80 0 0 1 180 100"
+                                        stroke-dasharray="251" stroke-dashoffset="251" />
+                                </svg>
+                                <div class="gauge-value">
+                                    <span class="gauge-score" id="gaugeScore">--</span>
+                                    <span class="gauge-label hold" id="gaugeLabel">ANALYZING</span>
+                                </div>
+                            </div>
+                            <div class="gauge-confidence" id="gaugeConfidence">
+                                <span>Confidence:</span> <strong>--</strong>
+                            </div>
+                        </div>
+
+                        <!-- Expert Rationale -->
+                        <div class="research-card">
+                            <div class="expert-rationale">
+                                <div class="expert-rationale-title">
+                                    🧠 Expert Analysis
+                                </div>
+                                <p class="expert-rationale-text" id="expertRationale">
+                                    Enter a stock symbol above to get expert analysis...
+                                </p>
+                            </div>
+                        </div>
+
+                        <!-- Recent News -->
+                        <div class="research-card">
+                            <h4>📰 Recent News</h4>
+                            <div class="research-news-list" id="researchNewsList">
+                                <p class="text-muted">No recent news</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Right: Factor Scores & Metrics -->
+                    <div class="research-sidebar">
+                        <!-- Factor Scores -->
+                        <div class="research-card">
+                            <h4>📈 Factor Analysis</h4>
+                            <div class="factor-scores" id="factorScores">
+                                <div class="factor-row">
+                                    <span class="factor-name">Value</span>
+                                    <div class="factor-bar-bg">
+                                        <div class="factor-bar-fill medium" id="factorValue" style="width: 50%"></div>
+                                    </div>
+                                    <span class="factor-value" id="factorValueScore">50</span>
+                                </div>
+                                <div class="factor-row">
+                                    <span class="factor-name">Growth</span>
+                                    <div class="factor-bar-bg">
+                                        <div class="factor-bar-fill medium" id="factorGrowth" style="width: 50%"></div>
+                                    </div>
+                                    <span class="factor-value" id="factorGrowthScore">50</span>
+                                </div>
+                                <div class="factor-row">
+                                    <span class="factor-name">Safety</span>
+                                    <div class="factor-bar-bg">
+                                        <div class="factor-bar-fill medium" id="factorSafety" style="width: 50%"></div>
+                                    </div>
+                                    <span class="factor-value" id="factorSafetyScore">50</span>
+                                </div>
+                                <div class="factor-row">
+                                    <span class="factor-name">Technicals</span>
+                                    <div class="factor-bar-bg">
+                                        <div class="factor-bar-fill medium" id="factorTechnicals" style="width: 50%">
+                                        </div>
+                                    </div>
+                                    <span class="factor-value" id="factorTechnicalsScore">50</span>
+                                </div>
+                                <div class="factor-row">
+                                    <span class="factor-name">Sentiment</span>
+                                    <div class="factor-bar-bg">
+                                        <div class="factor-bar-fill medium" id="factorSentiment" style="width: 50%">
+                                        </div>
+                                    </div>
+                                    <span class="factor-value" id="factorSentimentScore">50</span>
+                                </div>
+                                <div class="factor-row">
+                                    <span class="factor-name">Quality</span>
+                                    <div class="factor-bar-bg">
+                                        <div class="factor-bar-fill medium" id="factorQuality" style="width: 50%"></div>
+                                    </div>
+                                    <span class="factor-value" id="factorQualityScore">50</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Key Metrics -->
+                        <div class="research-card">
+                            <h4>📊 Key Metrics</h4>
+                            <div class="metrics-grid" id="researchMetrics">
+                                <div class="metric-item">
+                                    <span class="metric-label">P/E Ratio</span>
+                                    <span class="metric-value" id="metricPE">--</span>
+                                </div>
+                                <div class="metric-item">
+                                    <span class="metric-label">P/B Ratio</span>
+                                    <span class="metric-value" id="metricPB">--</span>
+                                </div>
+                                <div class="metric-item">
+                                    <span class="metric-label">ROE</span>
+                                    <span class="metric-value" id="metricROE">--</span>
+                                </div>
+                                <div class="metric-item">
+                                    <span class="metric-label">ROCE</span>
+                                    <span class="metric-value" id="metricROCE">--</span>
+                                </div>
+                                <div class="metric-item">
+                                    <span class="metric-label">D/E Ratio</span>
+                                    <span class="metric-value" id="metricDE">--</span>
+                                </div>
+                                <div class="metric-item">
+                                    <span class="metric-label">Div Yield</span>
+                                    <span class="metric-value" id="metricDivYield">--</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Related Stocks -->
+                        <div class="research-card">
+                            <h4>🔗 Related Stocks</h4>
+                            <div class="related-stocks" id="relatedStocks">
+                                <p class="text-muted">--</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="empty-state" id="researchEmpty">
+                    <span>🔬</span>
+                    <p>Enter a stock symbol above to start research</p>
+                </div>
+            </section>
+
             <!-- Sources Section -->
             <section class="section hidden" id="sources-section">
                 <div class="section-header">
@@ -492,6 +732,36 @@
             <!-- Settings Section -->
             <section class="section hidden" id="settings-section">
                 <div class="settings-grid">
+                    <!-- System & AI Configuration -->
+                    <div class="settings-card">
+                        <h3>⚙️ System Configuration</h3>
+                        <div class="settings-row"
+                            style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 20px; border-bottom: 1px solid var(--border-color);">
+                            <div>
+                                <h4 style="margin-bottom: 4px;">System Monitoring</h4>
+                                <p style="font-size: 13px; color: var(--text-secondary);">Enable background Telegram &
+                                    News monitoring</p>
+                            </div>
+                            <label class="switch">
+                                <input type="checkbox" id="systemToggle" checked>
+                                <span class="slider round"></span>
+                            </label>
+                        </div>
+
+                        <div class="settings-row"
+                            style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                            <div>
+                                <h4 style="margin-bottom: 4px;">AI Features</h4>
+                                <p style="font-size: 13px; color: var(--text-secondary);">Enable Gemini-powered analysis
+                                    and chat</p>
+                            </div>
+                            <label class="switch">
+                                <input type="checkbox" id="aiToggle" checked>
+                                <span class="slider round"></span>
+                            </label>
+                        </div>
+                    </div>
+
                     <!-- Telegram Auth -->
                     <div class="settings-card">
                         <h3>📱 Telegram Authentication</h3>
@@ -531,9 +801,281 @@
                             <li>Copy your API ID and API Hash</li>
                         </ol>
                     </div>
+
+                    <!-- Gemini AI Settings -->
+                    <div class="settings-card">
+                        <h3>🤖 Gemini AI Configuration</h3>
+                        <div class="form-group">
+                            <label>Gemini API Key</label>
+                            <input type="password" id="geminiApiKey" placeholder="Enter your Gemini API key">
+                            <small style="color: var(--text-muted);">Get your key from <a
+                                    href="https://aistudio.google.com/app/apikey" target="_blank">Google AI
+                                    Studio</a></small>
+                        </div>
+                        <div class="form-group">
+                            <label>Model Name</label>
+                            <select id="geminiModel">
+                                <option value="gemini-3.0-flash">Gemini 3.0 Flash (Fastest)</option>
+                                <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
+                                <option value="gemini-pro">Gemini Pro</option>
+                            </select>
+                        </div>
+                        <button class="btn btn-primary" id="saveGeminiBtn">Save Gemini Settings</button>
+                        <span id="geminiSaveStatus" style="margin-left: 12px; color: var(--text-muted);"></span>
+                    </div>
                 </div>
             </section>
+
+            <!-- Stock Detail Modal (Universal - accessible from any page) -->
+            <div class="modal hidden" id="stockDetailModal">
+                <div class="modal-content stock-detail-modal">
+                    <div class="stock-detail-header">
+                        <div class="stock-title-block">
+                            <h3 id="stockDetailTitle">Loading...</h3>
+                            <span class="stock-category-badge" id="stockCategoryBadge"></span>
+                        </div>
+                        <button type="button" class="modal-close-btn" id="closeStockDetail">×</button>
+                    </div>
+
+                    <div class="stock-detail-body">
+                        <!-- Price Overview -->
+                        <div class="stock-price-overview" id="stockPriceOverview">
+                            <div class="current-price-block">
+                                <span class="price-label">Current Price</span>
+                                <span class="price-value" id="stockCurrentPrice">--</span>
+                                <span class="price-change" id="stockPriceChange">--</span>
+                            </div>
+                            <div class="price-range">
+                                <div><span>Day Low</span><strong id="stockDayLow">--</strong></div>
+                                <div><span>Day High</span><strong id="stockDayHigh">--</strong></div>
+                                <div><span>Prev Close</span><strong id="stockPrevClose">--</strong></div>
+                            </div>
+                        </div>
+
+                        <!-- Target & Stop Loss -->
+                        <div class="stock-targets" id="stockTargets">
+                            <div class="target-card target">
+                                <span class="target-label">🎯 Target</span>
+                                <span class="target-value" id="stockTarget">--</span>
+                                <span class="target-percent" id="stockTargetPercent">--</span>
+                            </div>
+                            <div class="target-card stoploss">
+                                <span class="target-label">🛑 Stop Loss</span>
+                                <span class="target-value" id="stockStopLoss">--</span>
+                                <span class="target-percent" id="stockSLPercent">--</span>
+                            </div>
+                        </div>
+
+                        <!-- Price Chart -->
+                        <div class="stock-chart-container">
+                            <h4>📈 Price History (30 Days)</h4>
+                            <canvas id="stockChart" height="150"></canvas>
+                        </div>
+
+                        <!-- Advanced Recommendation -->
+                        <div class="stock-advanced-rec" id="stockAdvancedRec"
+                            style="margin-bottom: 24px; padding: 16px; background: rgba(var(--accent-primary-rgb), 0.05); border-radius: 12px; border: 1px solid rgba(var(--accent-primary-rgb), 0.2);">
+                            <h4 style="margin: 0 0 16px 0; display: flex; align-items: center; gap: 8px;">
+                                🤖 Expert AI Analysis
+                                <span
+                                    style="font-size: 11px; padding: 2px 6px; background: var(--bg-secondary); border-radius: 4px; color: var(--text-muted); font-weight: normal;">BETA</span>
+                            </h4>
+                            <div class="adv-rec-container">
+                                <!-- AI Verdict Header -->
+                                <div class="rec-header"
+                                    style="text-align: center; margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1px solid var(--border-color);">
+                                    <div id="recVerdict"
+                                        style="font-size: 24px; font-weight: 800; background: var(--accent-gradient); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 8px;">
+                                        --
+                                    </div>
+                                    <div class="signal-badge" id="recSignalBadge"
+                                        style="display: inline-block; font-size: 14px; font-weight: 700; padding: 4px 12px; border-radius: 99px; background: var(--bg-secondary); margin-bottom: 12px;">
+                                        --</div>
+
+                                    <div class="confidence-meter"
+                                        style="display: flex; align-items: center; justify-content: center; gap: 8px;">
+                                        <span style="font-size: 12px; color: var(--text-secondary);">AI
+                                            Confidence</span>
+                                        <div class="meter-bar"
+                                            style="width: 60px; height: 6px; background: var(--bg-secondary); border-radius: 3px; overflow: hidden;">
+                                            <div class="fill" id="recConfidenceFill"
+                                                style="height: 100%; width: 0%; background: var(--accent-primary); transition: width 0.5s ease;">
+                                            </div>
+                                        </div>
+                                        <span id="recConfidenceValue"
+                                            style="font-size: 12px; font-weight: 600;">0%</span>
+                                    </div>
+                                </div>
+
+                                <!-- Analysis Tabs -->
+                                <div class="analysis-tabs"
+                                    style="display: flex; gap: 2px; background: rgba(255,255,255,0.05); padding: 2px; border-radius: 8px; margin-bottom: 16px;">
+                                    <button class="tab-btn active" onclick="switchAnalysisTab('rationale')"
+                                        style="flex:1; padding: 8px; border: none; background: var(--bg-card); border-radius: 6px; color: var(--text-primary); font-size: 12px; font-weight: 600; cursor: pointer;">Rationale</button>
+                                    <button class="tab-btn" onclick="switchAnalysisTab('bull')"
+                                        style="flex:1; padding: 8px; border: none; background: transparent; border-radius: 6px; color: var(--text-secondary); font-size: 12px; font-weight: 600; cursor: pointer;">Bull
+                                        Case 🐂</button>
+                                    <button class="tab-btn" onclick="switchAnalysisTab('bear')"
+                                        style="flex:1; padding: 8px; border: none; background: transparent; border-radius: 6px; color: var(--text-secondary); font-size: 12px; font-weight: 600; cursor: pointer;">Bear
+                                        Case 🐻</button>
+                                </div>
+
+                                <div id="tabContentRationale" class="tab-content" style="display: block;">
+                                    <div class="rec-rationale" id="recRationale"
+                                        style="font-size: 14px; line-height: 1.6; color: var(--text-primary); margin-bottom: 20px; font-style: italic; background: rgba(255,255,255,0.02); padding: 12px; border-radius: 8px; border-left: 3px solid var(--accent-primary);">
+                                    </div>
+                                </div>
+
+                                <div id="tabContentBull" class="tab-content" style="display: none;">
+                                    <ul id="recBullList" style="list-style: none; margin-bottom: 20px; padding: 0;">
+                                    </ul>
+                                </div>
+
+                                <div id="tabContentBear" class="tab-content" style="display: none;">
+                                    <ul id="recBearList" style="list-style: none; margin-bottom: 20px; padding: 0;">
+                                    </ul>
+                                </div>
+
+                                <!-- Factor Ratings -->
+                                <div class="rec-factors-grid"
+                                    style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px;">
+                                    <div class="factor-card" style="text-align: center;">
+                                        <div style="font-size: 10px; color: var(--text-secondary); margin-bottom: 4px;">
+                                            VALUE</div>
+                                        <div class="factor-bar"
+                                            style="height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; overflow: hidden; margin-bottom: 4px;">
+                                            <div id="factorFillValue"
+                                                style="height: 100%; width: 0%; background: var(--accent-primary);">
+                                            </div>
+                                        </div>
+                                        <div id="factorScoreValue" style="font-size: 12px; font-weight: 700;">--</div>
+                                    </div>
+                                    <div class="factor-card" style="text-align: center;">
+                                        <div style="font-size: 10px; color: var(--text-secondary); margin-bottom: 4px;">
+                                            GROWTH</div>
+                                        <div class="factor-bar"
+                                            style="height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; overflow: hidden; margin-bottom: 4px;">
+                                            <div id="factorFillGrowth"
+                                                style="height: 100%; width: 0%; background: var(--success);"></div>
+                                        </div>
+                                        <div id="factorScoreGrowth" style="font-size: 12px; font-weight: 700;">--</div>
+                                    </div>
+                                    <div class="factor-card" style="text-align: center;">
+                                        <div style="font-size: 10px; color: var(--text-secondary); margin-bottom: 4px;">
+                                            SAFETY</div>
+                                        <div class="factor-bar"
+                                            style="height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; overflow: hidden; margin-bottom: 4px;">
+                                            <div id="factorFillSafety"
+                                                style="height: 100%; width: 0%; background: var(--info);"></div>
+                                        </div>
+                                        <div id="factorScoreSafety" style="font-size: 12px; font-weight: 700;">--</div>
+                                    </div>
+                                    <div class="factor-card" style="text-align: center;">
+                                        <div style="font-size: 10px; color: var(--text-secondary); margin-bottom: 4px;">
+                                            QUALITY</div>
+                                        <div class="factor-bar"
+                                            style="height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; overflow: hidden; margin-bottom: 4px;">
+                                            <div id="factorFillQuality"
+                                                style="height: 100%; width: 0%; background: var(--accent-secondary);">
+                                            </div>
+                                        </div>
+                                        <div id="factorScoreQuality" style="font-size: 12px; font-weight: 700;">--</div>
+                                    </div>
+                                </div>
+
+                                <div class="rec-factors" style="margin-bottom: 20px;">
+                                    <h5
+                                        style="font-size: 12px; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 8px;">
+                                        Key Drivers</h5>
+                                    <div class="factors-list" id="recFactorsList"
+                                        style="display: flex; flex-wrap: wrap; gap: 8px;"></div>
+                                </div>
+
+                                <div class="rec-timeframes"
+                                    style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;">
+                                    <div class="tf-card" id="tfIntraday"
+                                        style="background: var(--bg-card); padding: 8px; border-radius: 8px; text-align: center; border: 1px solid var(--border-color);">
+                                        <div class="tf-label"
+                                            style="font-size: 10px; color: var(--text-secondary); margin-bottom: 4px;">
+                                            INTRADAY</div>
+                                        <div class="tf-signal" style="font-weight: 700; font-size: 13px;">--</div>
+                                    </div>
+                                    <div class="tf-card" id="tfShortTerm"
+                                        style="background: var(--bg-card); padding: 8px; border-radius: 8px; text-align: center; border: 1px solid var(--border-color);">
+                                        <div class="tf-label"
+                                            style="font-size: 10px; color: var(--text-secondary); margin-bottom: 4px;">
+                                            SHORT TERM</div>
+                                        <div class="tf-signal" style="font-weight: 700; font-size: 13px;">--</div>
+                                    </div>
+                                    <div class="tf-card" id="tfMidTerm"
+                                        style="background: var(--bg-card); padding: 8px; border-radius: 8px; text-align: center; border: 1px solid var(--border-color);">
+                                        <div class="tf-label"
+                                            style="font-size: 10px; color: var(--text-secondary); margin-bottom: 4px;">
+                                            MID TERM</div>
+                                        <div class="tf-signal" style="font-weight: 700; font-size: 13px;">--</div>
+                                    </div>
+                                    <div class="tf-card" id="tfLongTerm"
+                                        style="background: var(--bg-card); padding: 8px; border-radius: 8px; text-align: center; border: 1px solid var(--border-color);">
+                                        <div class="tf-label"
+                                            style="font-size: 10px; color: var(--text-secondary); margin-bottom: 4px;">
+                                            LONG TERM</div>
+                                        <div class="tf-signal" style="font-weight: 700; font-size: 13px;">--</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Key Ratios -->
+                        <div class="stock-ratios">
+                            <h4>📊 Key Ratios</h4>
+                            <div class="ratios-grid" id="stockRatiosGrid">
+                                <!-- Populated by JS -->
+                            </div>
+                        </div>
+
+                        <!-- Recommendations -->
+                        <div class="stock-recommendations" id="stockRecsSection">
+                            <h4>💡 AI Recommendations</h4>
+                            <div class="recs-list" id="stockRecsList"></div>
+                        </div>
+
+                        <!-- External Links -->
+                        <div class="stock-external-links">
+                            <h4>🔗 Research Links</h4>
+                            <div class="links-row" id="stockExternalLinks"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </main>
+    </div>
+
+    <!-- Chatbot Toggler -->
+    <button class="chatbot-toggler">
+        <span class="material-icons">chat</span>
+        <span class="material-icons">close</span>
+    </button>
+
+    <div class="chatbot">
+        <header>
+            <h2>AI Assistant</h2>
+            <span class="close-btn material-icons">close</span>
+        </header>
+        <ul class="chatbox">
+            <li class="chat incoming">
+                <span class="material-icons">smart_toy</span>
+                <p>Hi! I'm your AI market assistant. How can I help you today?</p>
+            </li>
+        </ul>
+        <div class="suggestion-chips">
+            <div class="chip" onclick="handleChip('Analyze reliance')">📊 Analyze Reliance</div>
+            <div class="chip" onclick="handleChip('Top stocks to buy')">🚀 Top Picks</div>
+            <div class="chip" onclick="handleChip('Market news')">📰 Market News</div>
+        </div>
+        <div class="chat-input">
+            <textarea placeholder="Ask something..." required></textarea>
+            <span id="send-btn" class="material-icons">send</span>
+        </div>
     </div>
 
     <script src="/static/app.js"></script>

@@ -14,8 +14,9 @@ from .models import MarketNews, FetchLog, Config
 
 logger = logging.getLogger(__name__)
 
-# RSS Feed URLs for Indian Stock Market News
+# RSS Feed URLs for Indian Stock Market News (22 Sources)
 RSS_FEEDS = {
+    # ===== Major Financial News =====
     "economic_times": {
         "name": "Economic Times Markets",
         "url": "https://economictimes.indiatimes.com/markets/rssfeeds/1977021501.cms",
@@ -24,17 +25,33 @@ RSS_FEEDS = {
         "name": "Economic Times Stocks",
         "url": "https://economictimes.indiatimes.com/markets/stocks/rssfeeds/2146842.cms",
     },
+    "economic_times_ipo": {
+        "name": "Economic Times IPO",
+        "url": "https://economictimes.indiatimes.com/markets/ipos/rssfeeds/2886573.cms",
+    },
     "moneycontrol": {
         "name": "Moneycontrol",
         "url": "https://www.moneycontrol.com/rss/latestnews.xml",
+    },
+    "moneycontrol_markets": {
+        "name": "Moneycontrol Markets",
+        "url": "https://www.moneycontrol.com/rss/marketreports.xml",
     },
     "business_standard": {
         "name": "Business Standard Markets",
         "url": "https://www.business-standard.com/rss/markets.rss",
     },
+    "business_standard_companies": {
+        "name": "Business Standard Companies",
+        "url": "https://www.business-standard.com/rss/companies.rss",
+    },
     "livemint": {
         "name": "Livemint Markets",
         "url": "https://www.livemint.com/rss/markets",
+    },
+    "livemint_companies": {
+        "name": "Livemint Companies",
+        "url": "https://www.livemint.com/rss/companies",
     },
     "financial_express_markets": {
         "name": "Financial Express Markets",
@@ -43,6 +60,55 @@ RSS_FEEDS = {
     "financial_express_companies": {
         "name": "Financial Express Companies",
         "url": "https://www.financialexpress.com/companies/rss",
+    },
+    # ===== TV News Channels =====
+    "ndtv_profit": {
+        "name": "NDTV Profit",
+        "url": "https://feeds.feedburner.com/ndtvprofit-latest",
+    },
+    "cnbc_tv18": {
+        "name": "CNBC TV18",
+        "url": "https://www.cnbctv18.com/commonfeeds/v1/cne/rss/market.xml",
+    },
+    "zee_business": {
+        "name": "Zee Business",
+        "url": "https://zeenews.india.com/rss/business.xml",
+    },
+    "news18_business": {
+        "name": "News18 Business",
+        "url": "https://www.news18.com/rss/business.xml",
+    },
+    # ===== Business Dailies =====
+    "business_line": {
+        "name": "The Hindu Business Line",
+        "url": "https://www.thehindubusinessline.com/markets/feeder/default.rss",
+    },
+    "business_line_stocks": {
+        "name": "Business Line Stocks",
+        "url": "https://www.thehindubusinessline.com/markets/stock-markets/feeder/default.rss",
+    },
+    # ===== International =====
+    "reuters_india": {
+        "name": "Reuters India Business",
+        "url": "https://feeds.reuters.com/reuters/INbusinessNews",
+    },
+    # ===== Commodities & Forex =====
+    "et_commodities": {
+        "name": "ET Commodities",
+        "url": "https://economictimes.indiatimes.com/markets/commodities/rssfeeds/1808152121.cms",
+    },
+    "et_forex": {
+        "name": "ET Forex",
+        "url": "https://economictimes.indiatimes.com/markets/forex/rssfeeds/1977097323.cms",
+    },
+    # ===== Mutual Funds & Investment =====
+    "et_mutual_funds": {
+        "name": "ET Mutual Funds",
+        "url": "https://economictimes.indiatimes.com/mutual-funds/rssfeeds/35464301.cms",
+    },
+    "mc_mutual_funds": {
+        "name": "Moneycontrol MF",
+        "url": "https://www.moneycontrol.com/rss/mf.xml",
     },
 }
 

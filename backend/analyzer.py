@@ -346,11 +346,23 @@ class StockAnalyzer:
         
         confidence *= timeframe_adjustments.get(timeframe, 1.0)
         
-        # Generate reasoning
+        # Generate timeframe-specific reasoning
+        timeframe_insight = {
+            'next_day': "Short-term momentum suggests",
+            'next_week': "Weekly trend analysis indicates",
+            'next_month': "Monthly outlook shows",
+            '1yr': "Annual projections based on fundamentals suggest",
+            '2yr': "Medium-term growth trajectory indicates",
+            '5yr': "Long-term value creation potential shows",
+            '10yr': "Ultra long-term compounding perspective suggests"
+        }
+        
+        insight_prefix = timeframe_insight.get(timeframe, "Analysis indicates")
+        
         reasoning_templates = {
-            'BUY': f"Based on {bullish} bullish signals out of {total} mentions. Strong buying interest detected in recent market discussions.",
-            'SELL': f"Based on {bearish} bearish signals out of {total} mentions. Selling pressure or negative sentiment detected.",
-            'HOLD': f"Mixed signals with {bullish} bullish and {bearish} bearish mentions. Consider holding current position."
+            'BUY': f"{insight_prefix} potential upside. Detected {bullish} bullish signals out of {total} mentions in recent discussions.",
+            'SELL': f"{insight_prefix} possible downside. Detected {bearish} bearish signals out of {total} mentions in recent discussions.",
+            'HOLD': f"{insight_prefix} mixed sentiment. {bullish} bullish / {bearish} bearish signals. Market consensus is unclear."
         }
         
         return {
@@ -369,54 +381,40 @@ class StockAnalyzer:
         db = SessionLocal()
         recommendations = []
         
-        timeframes = ['next_day', 'next_week', 'next_month', '1yr', '2yr', '5yr', '10yr']
+        timeframes = ['next_day', 'next_week', 'next_month']
         
         try:
             # Get stocks from analysis
-            top_stocks = [s for s, _ in analysis_result.get('top_stocks', [])[:3]]
+            top_stocks = [s for s, _ in analysis_result.get('top_stocks', [])]
             stock_sentiments = analysis_result.get('stock_sentiments', {})
             analysis_id = analysis_result.get('analysis_id')
             
-            # Add random picks from different market cap categories for diversity
-            random_large = random.sample(LARGE_CAP_STOCKS, min(2, len(LARGE_CAP_STOCKS)))
-            random_mid = random.sample(MID_CAP_STOCKS, min(2, len(MID_CAP_STOCKS)))
-            random_small = random.sample(SMALL_CAP_STOCKS, min(2, len(SMALL_CAP_STOCKS)))
-            random_penny = random.sample(PENNY_STOCKS, min(2, len(PENNY_STOCKS)))
+            # Only process stocks that actually have data
+            all_stocks = top_stocks
             
-            # Combine: analyzed stocks + random picks (deduplicated)
-            all_stocks = list(set(
-                top_stocks + random_large + random_mid + random_small + random_penny
-            ))
-            
-            # Shuffle for randomness
-            random.shuffle(all_stocks)
-            
-            for symbol in all_stocks[:10]:  # Max 10 stocks
-                # Use actual sentiment if available, otherwise generate based on category
-                if symbol in stock_sentiments:
-                    sentiment_data = stock_sentiments[symbol]
-                else:
-                    # Generate pseudo-sentiment for random picks
-                    sentiment_data = self._generate_market_sentiment(symbol)
+            for symbol in all_stocks[:20]:  # Limit to top 20 real stocks
+                if symbol not in stock_sentiments:
+                    continue
+                    
+                sentiment_data = stock_sentiments[symbol]
                 
                 for timeframe in timeframes:
                     rec = self.generate_recommendation(symbol, sentiment_data, timeframe)
                     
                     if rec:
-                        # Attempt to get deeper reasoning from LLM for high confidence picks
-                        reasoning = rec['reasoning']
-                        if rec['confidence'] > 75 and rec['action'] != 'HOLD':
-                            try:
-                                context = f"Symbol: {symbol}. Signals: {sentiment_data}. Market Cap: {self._get_stock_category(symbol)}."
-                                llm_reasoning = await llm_service.generate_reasoning(
-                                    symbol=symbol,
-                                    signal_type=rec['action'],
-                                    context=context
-                                )
-                                if llm_reasoning:
-                                    reasoning = llm_reasoning
-                            except Exception as e:
-                                logger.warning(f"LLM Reasoning failed for {symbol}: {e}")
+                        # ALWAYS use LLM for reasoning to avoid repetitive templates
+                        # Fallback to template only on error
+                        try:
+                            context = f"Symbol: {symbol}. Timeframe: {timeframe}. Signals: {sentiment_data}. Market Cap: {self._get_stock_category(symbol)}."
+                            llm_reasoning = await llm_service.generate_reasoning(
+                                symbol=symbol,
+                                signal_type=rec['action'],
+                                context=context
+                            )
+                            if llm_reasoning:
+                                rec['reasoning'] = llm_reasoning
+                        except Exception as e:
+                            logger.warning(f"LLM Reasoning failed for {symbol}: {e}")
 
                         # Add stock category label
                         rec['category'] = self._get_stock_category(symbol)
@@ -428,7 +426,7 @@ class StockAnalyzer:
                             timeframe=rec['timeframe'],
                             action=rec['action'],
                             confidence=rec['confidence'],
-                            reasoning=reasoning
+                            reasoning=rec['reasoning']
                         )
                         db.add(db_rec)
                         recommendations.append(rec)
@@ -441,18 +439,7 @@ class StockAnalyzer:
         
         return recommendations
     
-    def _generate_market_sentiment(self, symbol: str) -> Dict:
-        """Generate dynamic sentiment for stocks not in analysis"""
-        # Use randomized but weighted sentiment
-        rand = random.random()
-        
-        # Slight bullish bias overall (markets trend up long-term)
-        if rand < 0.45:
-            return {'bullish': random.randint(2, 5), 'bearish': random.randint(0, 2), 'neutral': random.randint(0, 2)}
-        elif rand < 0.75:
-            return {'bullish': random.randint(1, 3), 'bearish': random.randint(1, 3), 'neutral': random.randint(1, 3)}
-        else:
-            return {'bullish': random.randint(0, 2), 'bearish': random.randint(2, 4), 'neutral': random.randint(0, 2)}
+
     
     def _get_stock_category(self, symbol: str) -> str:
         """Get market cap category for a stock"""

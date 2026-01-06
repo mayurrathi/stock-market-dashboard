@@ -8,8 +8,15 @@ A real-time stock signal analyzer that fetches messages from Telegram channels, 
 - 📰 **Market News Integration** - Fetch news from Economic Times, Moneycontrol
 - 📊 **Stock Price Tracking** - Live NIFTY 50, SENSEX, Bank NIFTY indices
 - 🎯 **AI Recommendations** - Multi-timeframe stock recommendations
+- 🤖 **Expert AI Engine** - "Verdict" based analysis with Bull/Bear scenarios & Factor Ratings
 - 📅 **Calendar Filters** - Filter by Last Hour, Today, Last Day, Last Week, Last Month
 - 🔍 **Signal Analysis** - Stock extraction, sentiment analysis, correlation
+
+## Expert AI Analysis (New 🚀)
+The dashboard now features an **Expert Engine 2.0** that provides:
+- **AI Verdict**: Punchy titles like "💎 Hidden Gem" or "⚠️ Value Trap" to give you an instant summary.
+- **Scenario Analysis**: Distinct **Bull Case** 🐂 and **Bear Case** 🐻 scenarios to help you weigh risks and rewards.
+- **Factor Ratings**: 0-100 scores for **Value**, **Growth**, **Safety**, and **Quality**.
 
 ## Recommendation Timeframes
 

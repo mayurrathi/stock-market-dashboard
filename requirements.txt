@@ -24,4 +24,4 @@ beautifulsoup4
 
 # AI & Sentiment
 vaderSentiment
-google-generativeai
+google-genai

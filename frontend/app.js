@@ -17,6 +17,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initializeDateInputs();
     loadDashboardStats();
     loadIndices();
+    loadLiveSignals();  // Load Live Signal Feed
     loadAllStarPicks();  // Load All Star section
     loadRecommendations();
     checkTelegramStatus();
@@ -29,6 +30,7 @@ document.addEventListener('DOMContentLoaded', () => {
     setupAllStarRefresh();  // Setup All Star refresh button
     setupUniversalCardClicks(); // Unified click handling for all cards
     setupAutoRefresh();     // Setup 32s Auto-Refresh
+    initOmnibar();          // Unified Search/Chat
 });
 
 // ===== Initialization =====
@@ -181,7 +183,7 @@ function refreshCurrentSection() {
     } else if (currentSection === 'overview') {
         loadMarketOverview();
     } else if (currentSection === 'watchlist') {
-        loadWatchlist();
+        refreshWatchlistWithPrices();
     } else if (currentSection === 'recommendations') {
         loadRecommendationsFull();
     } else if (currentSection === 'sources') {
@@ -303,15 +305,28 @@ async function loadAllStarPicks() {
 
         if (data.picks && data.picks.length > 0) {
             // Update timer
-            if (data.valid_until) {
-                const validDate = new Date(data.valid_until);
-                timer.textContent = `Valid until ${validDate.toLocaleString('en-IN', {
-                    hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short'
-                })}`;
+            // Update timer
+            if (data.generated_at || data.valid_until) {
+                // Prefer generated_at date, fallback to valid_until (which is end of day)
+                const dateStr = data.generated_at || data.valid_until;
+                const dateObj = new Date(dateStr);
+                const isToday = dateObj.toDateString() === new Date().toDateString();
+
+                const timeStr = dateObj.toLocaleString('en-IN', {
+                    hour: '2-digit', minute: '2-digit'
+                });
+
+                const dayStr = dateObj.toLocaleString('en-IN', {
+                    day: 'numeric', month: 'short'
+                });
+
+                // User requested relevant INT time info
+                timer.textContent = `Analysis: ${dayStr} • ${timeStr} IST`;
             }
 
             container.innerHTML = data.picks.map((pick, index) => `
-                <div class="allstar-card ${pick.action.toLowerCase()}" data-symbol="${pick.symbol}" style="cursor: pointer;">
+                <div class="allstar-card ${pick.action.toLowerCase()}" data-symbol="${pick.symbol}" style="cursor: pointer; position: relative;">
+                    <button onclick="quickAddToWatchlist('${pick.symbol}', event)" title="Add to Watchlist" style="position: absolute; top: 8px; right: 8px; width: 28px; height: 28px; border-radius: 50%; border: none; background: rgba(255,255,255,0.1); color: #fbbf24; cursor: pointer; font-size: 14px;">⭐</button>
                     <div class="allstar-rank">#${index + 1}</div>
                     <div class="allstar-main">
                         <div class="allstar-symbol">${pick.symbol}</div>
@@ -346,28 +361,152 @@ async function loadAllStarPicks() {
     }
 }
 
+async function loadLiveSignals() {
+    const container = document.getElementById('liveSignalFeed');
+    const countEl = document.getElementById('liveSignalCount');
+    const updatedEl = document.getElementById('liveSignalUpdated');
+
+    if (!container) return;
+
+    try {
+        const data = await apiCall('/api/signals/live?limit=20');
+
+        if (data.signals && data.signals.length > 0) {
+            countEl.textContent = data.count;
+            updatedEl.textContent = `Updated: ${new Date(data.last_updated).toLocaleTimeString('en-IN')}`;
+
+            container.innerHTML = data.signals.map(signal => {
+                const actionColors = {
+                    'STRONG BUY': { bg: 'rgba(16, 185, 129, 0.2)', color: '#10b981' },
+                    'BUY': { bg: 'rgba(52, 211, 153, 0.2)', color: '#34d399' },
+                    'HOLD': { bg: 'rgba(251, 191, 36, 0.2)', color: '#fbbf24' },
+                    'SELL': { bg: 'rgba(248, 113, 113, 0.2)', color: '#f87171' },
+                    'AVOID': { bg: 'rgba(239, 68, 68, 0.2)', color: '#ef4444' }
+                };
+                const style = actionColors[signal.action] || actionColors['HOLD'];
+                const attentionStyle = signal.requires_attention ? 'border: 2px solid var(--accent-primary); animation: pulse 2s infinite;' : '';
+
+                return `
+                    <div class="signal-card" style="min-width: 280px; background: var(--bg-card); border-radius: 12px; padding: 12px; ${attentionStyle}">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                            <span style="font-size: 11px; color: var(--text-muted);">${signal.channel_name}</span>
+                            <span style="font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 4px; background: ${style.bg}; color: ${style.color};">
+                                ${signal.action}
+                            </span>
+                        </div>
+                        <div style="font-size: 13px; color: var(--text-secondary); margin-bottom: 8px; line-height: 1.4;">
+                            ${signal.text}
+                        </div>
+                        <div style="display: flex; gap: 6px; flex-wrap: wrap; align-items: center;">
+                            ${signal.stocks.map(s => `
+                                <span style="display: inline-flex; align-items: center; gap: 4px;">
+                                    <span onclick="showStockDetail('${s}')" style="cursor: pointer; font-size: 11px; font-weight: 600; padding: 2px 6px; background: var(--accent-primary); color: #fff; border-radius: 4px;">${s}</span>
+                                    <button onclick="quickAddToWatchlist('${s}', event)" title="Add ${s} to Watchlist" style="width: 20px; height: 20px; border-radius: 50%; border: none; background: rgba(251, 191, 36, 0.2); color: #fbbf24; cursor: pointer; font-size: 10px;">⭐</button>
+                                </span>
+                            `).join('')}
+                        </div>
+                        <div style="font-size: 10px; color: var(--text-muted); margin-top: 8px;">
+                            ${new Date(signal.timestamp).toLocaleTimeString('en-IN')}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        } else {
+            countEl.textContent = '0';
+            container.innerHTML = '<div class="empty-state" style="flex: 1; text-align: center; padding: 24px; color: var(--text-muted);"><span>📡</span><p>No live signals in the last hour</p></div>';
+        }
+    } catch (error) {
+        console.error('Failed to load live signals:', error);
+    }
+}
+
 function setupAllStarRefresh() {
-    const btn = document.getElementById('refreshAllstar');
+    // The previous ID 'refreshAllstar' might be wrong if HTML uses class 'refresh-btn' or different ID.
+    // In index.html line 125, it is: <button class="btn btn-icon-round refresh-btn" onclick="refreshCurrentSection()">🔄</button>
+    // So 'refreshAllstar' ID might not exist.
+    // We should fix 'refreshCurrentSection' instead or ensure the button has the ID.
+}
+
+// Global refresh handler called by onclick="refreshCurrentSection()"
+async function refreshCurrentSection() {
+    const activeSection = document.querySelector('.nav-item.active').dataset.section;
+    const btn = document.querySelector('.section:not(.hidden) .refresh-btn');
+
     if (btn) {
+        btn.disabled = true;
+        btn.classList.add('spinning'); // Add CSS spin
+    }
+
+    try {
+        if (activeSection === 'dashboard' || activeSection === 'allstar') {
+            await loadAllStarPicks();
+            // Also refresh indices
+            await loadIndices();
+        } else if (activeSection === 'news') {
+            await loadNews();
+        } else if (activeSection === 'messages') {
+            await loadLiveSignals();
+        } else if (activeSection === 'recommendations') {
+            await loadRecommendations();
+        }
+        showToast('Refreshed!', 'success');
+    } catch (e) {
+        console.error("Refresh failed", e);
+        showToast('Refresh failed', 'error');
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.classList.remove('spinning');
+        }
+    }
+}
+
+// Gemini Save Logic
+async function setupGeminiSave() {
+    const btn = document.getElementById('saveGeminiBtn');
+    const input = document.getElementById('geminiKeyInput');
+
+    // Check initial status
+    try {
+        const config = await apiCall('/api/gemini/config');
+        if (config.has_key && input) {
+            input.placeholder = "✅ API Key is configured";
+        }
+    } catch (e) { console.error("Failed to check Gemini status", e); }
+
+    if (btn && input) {
         btn.addEventListener('click', async () => {
+            const key = input.value.trim();
+            if (!key) return showToast('Please enter a key', 'error');
+
             btn.disabled = true;
-            btn.textContent = '⏳ Refreshing...';
+            btn.textContent = 'Saving...';
 
             try {
-                // Force refresh by analyzing market first
-                await apiCall('/api/analyze?shortcut=last_day', { method: 'POST' });
+                // Correct endpoint and payload matching backend Pydantic model
+                await apiCall('/api/gemini/config', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        api_key: key,
+                        model: "gemini-3.0-flash" // Default model
+                    })
+                });
 
-                // Remove cached picks (they will regenerate)
-                await loadAllStarPicks();
-            } catch (error) {
-                console.error('Failed to refresh:', error);
+                showToast('API Key saved successfully!', 'success');
+                input.value = ''; // Clear for security
+                input.placeholder = "✅ API Key is configured";
+            } catch (e) {
+                console.error("Failed to save key", e);
+                showToast('Failed to save key: ' + e.message, 'error');
             } finally {
                 btn.disabled = false;
-                btn.textContent = '🔄 Refresh';
+                btn.textContent = 'Save';
             }
         });
     }
 }
+
+document.addEventListener('DOMContentLoaded', setupGeminiSave);
 
 function setupUniversalCardClicks() {
     // Single delegated listener for ALL interactive cards and tags across the dashboard
@@ -906,6 +1045,37 @@ async function loadMarketOverview() {
 
 // ===== Watchlist =====
 
+async function refreshWatchlistWithPrices() {
+    const container = document.getElementById('watchlistGrid');
+
+    // Show loading state
+    container.innerHTML = `
+        <div class="empty-state">
+            <span class="loading"></span>
+            <p>Refreshing prices...</p>
+        </div>
+    `;
+
+    try {
+        const data = await apiCall('/api/watchlist/refresh', { method: 'POST' });
+
+        if (data.stocks.length === 0) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <span>⭐</span>
+                    <p>Your watchlist is empty. Click "+ Add Stock" to add stocks to monitor.</p>
+                </div>
+            `;
+            return;
+        }
+
+        renderWatchlistCards(container, data.stocks);
+
+    } catch (error) {
+        container.innerHTML = `<div class="empty-state"><span>❌</span><p>Failed to refresh: ${error.message}</p></div>`;
+    }
+}
+
 async function loadWatchlist() {
     const container = document.getElementById('watchlistGrid');
 
@@ -922,41 +1092,45 @@ async function loadWatchlist() {
             return;
         }
 
-        container.innerHTML = `
-            <div class="watchlist-cards">
-                ${data.stocks.map(s => `
-                    <div class="watchlist-card" data-symbol="${s.symbol}" style="cursor: pointer; background: var(--bg-card); border-radius: 12px; padding: 20px; border: 1px solid var(--border-color);">
-                        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-                            <div>
-                                <div style="font-weight: 800; font-size: 20px;">${s.symbol}</div>
-                                <div style="color: var(--text-secondary); font-size: 13px;">${s.name || ''}</div>
-                                ${s.sector ? `<div style="color: var(--accent-primary); font-size: 12px; margin-top: 4px;">${s.sector}</div>` : ''}
-                            </div>
-                            <button class="btn btn-secondary" onclick="event.stopPropagation(); removeFromWatchlist('${s.symbol}')" style="padding: 6px 12px; font-size: 12px;">✕</button>
-                        </div>
-                        <div style="margin-top: 16px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; text-align: center;">
-                            <div>
-                                <div style="color: var(--text-muted); font-size: 11px;">CURRENT</div>
-                                <div style="font-weight: 700; font-size: 16px;">₹${s.current_price?.toLocaleString('en-IN') || '--'}</div>
-                            </div>
-                            <div>
-                                <div style="color: var(--success); font-size: 11px;">TARGET</div>
-                                <div style="font-weight: 700; font-size: 16px; color: var(--success);">₹${s.target_price?.toLocaleString('en-IN') || '--'}</div>
-                            </div>
-                            <div>
-                                <div style="color: var(--danger); font-size: 11px;">STOP LOSS</div>
-                                <div style="font-weight: 700; font-size: 16px; color: var(--danger);">₹${s.stop_loss?.toLocaleString('en-IN') || '--'}</div>
-                            </div>
-                        </div>
-                        ${s.notes ? `<div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-color); font-size: 13px; color: var(--text-secondary);">${escapeHtml(s.notes)}</div>` : ''}
-                    </div>
-                `).join('')}
-            </div>
-        `;
+        renderWatchlistCards(container, data.stocks);
 
     } catch (error) {
         container.innerHTML = `<div class="empty-state"><span>❌</span><p>Failed to load watchlist: ${error.message}</p></div>`;
     }
+}
+
+function renderWatchlistCards(container, stocks) {
+    container.innerHTML = `
+        <div class="watchlist-cards">
+            ${stocks.map(s => `
+                <div class="watchlist-card" data-symbol="${s.symbol}" style="cursor: pointer; background: var(--bg-card); border-radius: 12px; padding: 20px; border: 1px solid var(--border-color);">
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                        <div>
+                            <div style="font-weight: 800; font-size: 20px;">${s.symbol}</div>
+                            <div style="color: var(--text-secondary); font-size: 13px;">${s.name || ''}</div>
+                            ${s.sector ? `<div style="color: var(--accent-primary); font-size: 12px; margin-top: 4px;">${s.sector}</div>` : ''}
+                        </div>
+                        <button class="btn btn-secondary" onclick="event.stopPropagation(); removeFromWatchlist('${s.symbol}')" style="padding: 6px 12px; font-size: 12px;">✕</button>
+                    </div>
+                    <div style="margin-top: 16px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; text-align: center;">
+                        <div>
+                            <div style="color: var(--text-muted); font-size: 11px;">CURRENT</div>
+                            <div style="font-weight: 700; font-size: 16px;">₹${s.current_price?.toLocaleString('en-IN') || '--'}</div>
+                        </div>
+                        <div>
+                            <div style="color: var(--success); font-size: 11px;">TARGET</div>
+                            <div style="font-weight: 700; font-size: 16px; color: var(--success);">₹${s.target_price?.toLocaleString('en-IN') || '--'}</div>
+                        </div>
+                        <div>
+                            <div style="color: var(--danger); font-size: 11px;">STOP LOSS</div>
+                            <div style="font-weight: 700; font-size: 16px; color: var(--danger);">₹${s.stop_loss?.toLocaleString('en-IN') || '--'}</div>
+                        </div>
+                    </div>
+                    ${s.notes ? `<div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-color); font-size: 13px; color: var(--text-secondary);">${escapeHtml(s.notes)}</div>` : ''}
+                </div>
+            `).join('')}
+        </div>
+    `;
 }
 
 // Stock chart instance (for cleanup)
@@ -1016,6 +1190,9 @@ async function showStockDetail(symbol) {
 
         // Render recommendations
         renderStockRecommendations(data.recommendations);
+
+        // Render Advanced Recommendation
+        renderAdvancedRecommendation(data.advanced_recommendation);
 
         // Render external links
         renderExternalLinks(data.external_links, symbol);
@@ -1133,6 +1310,119 @@ function renderStockRecommendations(recs) {
     `).join('');
 }
 
+function renderAdvancedRecommendation(data) {
+    const container = document.getElementById('stockAdvancedRec');
+    if (!container) return;
+
+    if (!data || !data.overall_signal) {
+        container.style.display = 'none';
+        return;
+    }
+
+    container.style.display = 'block';
+
+    // Header
+    const signalBadge = document.getElementById('recSignalBadge');
+    signalBadge.textContent = data.overall_signal;
+    signalBadge.className = 'signal-badge ' + data.signal_class;
+
+    const colors = {
+        'strong_buy': '#10b981',
+        'buy': '#34d399',
+        'hold': '#fbbf24',
+        'sell': '#f87171',
+        'avoid': '#ef4444'
+    };
+    const color = colors[data.signal_class] || '#6b7280';
+
+    signalBadge.style.backgroundColor = color;
+    signalBadge.style.color = '#fff'; // Ensure text is visible
+
+    // Confidence
+    const confidenceFill = document.getElementById('recConfidenceFill');
+    const confidenceValue = document.getElementById('recConfidenceValue');
+    confidenceFill.style.width = `${data.confidence}%`;
+    confidenceFill.style.backgroundColor = color;
+    confidenceValue.textContent = `${data.confidence.toFixed(1)}%`;
+
+    // AI Verdict (New)
+    const verdictEl = document.getElementById('recVerdict');
+    if (verdictEl && data.ai_verdict) {
+        verdictEl.textContent = data.ai_verdict;
+    }
+
+    // Rationale
+    const rationale = document.getElementById('recRationale');
+    rationale.textContent = `"${data.expert_rationale}"`;
+
+    // Scenarios (New)
+    if (data.scenarios) {
+        const renderList = (id, items) => {
+            const list = document.getElementById(id);
+            if (list && items) {
+                list.innerHTML = items.map(item => `<li style="margin-bottom: 8px; font-size: 13px; color: var(--text-secondary); display: flex; gap: 8px;"><span style="color: var(--accent-primary);">•</span> ${item}</li>`).join('');
+            }
+        }
+        renderList('recBullList', data.scenarios.bull_case);
+        renderList('recBearList', data.scenarios.bear_case);
+    }
+
+    // Factor Ratings (New)
+    if (data.factor_ratings) {
+        const updateFactor = (name, score) => {
+            const fill = document.getElementById(`factorFill${name}`);
+            const text = document.getElementById(`factorScore${name}`);
+            if (fill && text) {
+                fill.style.width = `${score}%`;
+                text.textContent = score;
+                // Color coding
+                if (score >= 70) fill.style.backgroundColor = '#10b981'; // Green
+                else if (score >= 40) fill.style.backgroundColor = '#fbbf24'; // Yellow
+                else fill.style.backgroundColor = '#ef4444'; // Red
+            }
+        };
+
+        updateFactor('Value', data.factor_ratings.value || 0);
+        updateFactor('Growth', data.factor_ratings.growth || 0);
+        updateFactor('Safety', data.factor_ratings.safety || 0);
+        updateFactor('Quality', data.factor_ratings.quality || 0);
+    }
+
+    // Factors
+    const factorsList = document.getElementById('recFactorsList');
+    factorsList.innerHTML = data.key_factors.map(f => {
+        const isPos = f.impact === 'positive';
+        const textColor = isPos ? '#10b981' : '#ef4444';
+        const bg = isPos ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)';
+        const border = isPos ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)';
+
+        return `<div class="factor-tag" style="font-size: 11px; padding: 4px 8px; border-radius: 4px; background: ${bg}; color: ${textColor}; border: 1px solid ${border}; white-space: nowrap;">
+            ${isPos ? '▲' : '▼'} ${f.factor}
+        </div>`;
+    }).join('');
+
+    // Timeframes
+    const renderTimeframe = (id, tfData) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+
+        const signalEl = el.querySelector('.tf-signal');
+        if (tfData) {
+            signalEl.textContent = tfData.signal;
+            const tfColor = colors[tfData.signal.toLowerCase().replace(' ', '_')] || '#6b7280';
+            signalEl.style.color = tfColor;
+            el.style.borderColor = tfColor + '40'; // Low opacity border
+        } else {
+            signalEl.textContent = '--';
+        }
+    };
+
+    renderTimeframe('tfIntraday', data.timeframe_recommendations.intraday);
+    renderTimeframe('tfShortTerm', data.timeframe_recommendations.short_term);
+    renderTimeframe('tfMidTerm', data.timeframe_recommendations.medium_term);
+    renderTimeframe('tfLongTerm', data.timeframe_recommendations.long_term);
+}
+
 function renderExternalLinks(links, symbol) {
     const container = document.getElementById('stockExternalLinks');
     if (!container || !links) return;
@@ -1145,9 +1435,31 @@ function renderExternalLinks(links, symbol) {
         { key: 'tradingview', label: 'TradingView', icon: '📈' }
     ];
 
-    container.innerHTML = linkItems.map(item =>
+    // External links
+    let html = linkItems.map(item =>
         links[item.key] ? `<a href="${links[item.key]}" target="_blank" class="external-link-btn">${item.icon} ${item.label}</a>` : ''
     ).join('');
+
+    // Add Research Console link (internal navigation)
+    html += `<a href="#" onclick="openResearchForStock('${symbol}'); return false;" class="external-link-btn" style="background: var(--accent-gradient); color: #fff;">🔬 Research</a>`;
+
+    container.innerHTML = html;
+}
+
+function openResearchForStock(symbol) {
+    // Close the modal
+    const modal = document.getElementById('stockDetailModal');
+    if (modal) modal.classList.add('hidden');
+
+    // Switch to Research section
+    switchSection('research');
+
+    // Populate the research input and trigger search
+    const input = document.getElementById('researchSearchInput');
+    if (input) {
+        input.value = symbol;
+        loadResearchData(symbol);
+    }
 }
 
 
@@ -1159,6 +1471,44 @@ async function removeFromWatchlist(symbol) {
         loadWatchlist();
     } catch (error) {
         alert('Failed to remove: ' + error.message);
+    }
+}
+
+async function quickAddToWatchlist(symbol, event) {
+    // Prevent card click from triggering
+    if (event) {
+        event.stopPropagation();
+        event.preventDefault();
+    }
+
+    const btn = event ? event.currentTarget : null;
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '⏳';
+    }
+
+    try {
+        await apiCall('/api/watchlist', {
+            method: 'POST',
+            body: JSON.stringify({ symbol: symbol.toUpperCase() })
+        });
+
+        if (btn) {
+            btn.innerHTML = '✓';
+            btn.style.background = '#10b981';
+            btn.title = 'Added!';
+        }
+
+        // Refresh watchlist if visible
+        if (currentSection === 'watchlist') {
+            loadWatchlist();
+        }
+    } catch (error) {
+        if (btn) {
+            btn.innerHTML = '⭐';
+            btn.disabled = false;
+        }
+        console.error('Failed to add to watchlist:', error);
     }
 }
 
@@ -1382,3 +1732,643 @@ function debounce(func, wait) {
     };
 }
 
+
+// ===== PREMIUM FEATURES =====
+
+// Hero Search
+document.addEventListener('DOMContentLoaded', () => {
+    setupHeroSearch();
+    setupScreener();
+    setupResearchConsole();
+});
+
+function setupHeroSearch() {
+    const searchInput = document.getElementById('heroSearchInput');
+    const searchResults = document.getElementById('heroSearchResults');
+
+    if (!searchInput) return;
+
+    const performSearch = debounce(async (query) => {
+        if (query.length < 1) {
+            searchResults.classList.remove('active');
+            return;
+        }
+
+        try {
+            const response = await fetch(`${API_BASE}/api/search?q=${encodeURIComponent(query)}&limit=8`);
+            const data = await response.json();
+
+            if (data.results && data.results.length > 0) {
+                searchResults.innerHTML = data.results.map(stock => `
+                    <div class="search-result-item" data-symbol="${stock.symbol}">
+                        <span class="search-result-symbol">${stock.symbol}</span>
+                        <span class="search-result-name">${stock.name}</span>
+                        <span class="search-result-sector">${stock.sector}</span>
+                    </div>
+                `).join('');
+                searchResults.classList.add('active');
+
+                // Add click handlers
+                searchResults.querySelectorAll('.search-result-item').forEach(item => {
+                    item.addEventListener('click', () => {
+                        const symbol = item.dataset.symbol;
+                        searchResults.classList.remove('active');
+                        searchInput.value = '';
+                        showStockDetail(symbol);
+                    });
+                });
+            } else {
+                searchResults.innerHTML = '<div class="search-result-item"><span class="search-result-name">No results found</span></div>';
+                searchResults.classList.add('active');
+            }
+        } catch (error) {
+            console.error('Search error:', error);
+        }
+    }, 200);
+
+    searchInput.addEventListener('input', (e) => {
+        performSearch(e.target.value.trim());
+    });
+
+    searchInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            searchResults.classList.remove('active');
+        }
+    });
+
+    // Close on click outside
+    document.addEventListener('click', (e) => {
+        if (!e.target.closest('.hero-search')) {
+            searchResults.classList.remove('active');
+        }
+    });
+}
+
+
+// ===== STOCK SCREENER =====
+
+function setupScreener() {
+    const runBtn = document.getElementById('runScreenBtn');
+    const selectEl = document.getElementById('screenerSelect');
+
+    if (!runBtn || !selectEl) return;
+
+    runBtn.addEventListener('click', () => {
+        const screenId = selectEl.value;
+        if (screenId) {
+            runScreen(screenId);
+        }
+    });
+
+    selectEl.addEventListener('change', () => {
+        const screenId = selectEl.value;
+        if (screenId) {
+            runScreen(screenId);
+        }
+    });
+}
+
+async function runScreen(screenId) {
+    const resultsEl = document.getElementById('screenerResults');
+    const screenInfoEl = document.getElementById('screenInfo');
+
+    resultsEl.innerHTML = '<div class="empty-state"><span>⏳</span><p>Running screen...</p></div>';
+
+    try {
+        const response = await fetch(`${API_BASE}/api/screens/${screenId}/run`);
+        const data = await response.json();
+
+        if (data.stocks && data.stocks.length > 0) {
+            // Show screen info
+            if (screenInfoEl) {
+                document.getElementById('screenName').textContent = data.screen_name;
+                document.getElementById('screenDescription').textContent = data.description;
+                document.getElementById('matchCount').textContent = `${data.matches} matches`;
+                screenInfoEl.classList.remove('hidden');
+            }
+
+            resultsEl.innerHTML = data.stocks.map(stock => `
+                <div class="screener-card" data-symbol="${stock.symbol}" onclick="showStockDetail('${stock.symbol}')">
+                    <div class="screener-card-header">
+                        <span class="screener-card-symbol">${stock.symbol}</span>
+                        <span class="screener-card-score ${stock.score >= 75 ? 'high' : stock.score >= 50 ? 'medium' : 'low'}">
+                            ${Math.round(stock.score)}
+                        </span>
+                    </div>
+                    <div class="screener-card-name">${stock.mcap || 'Stock'}</div>
+                    <div class="screener-card-metrics">
+                        <div class="metric-item">
+                            <span class="metric-label">P/E</span>
+                            <span class="metric-value">${stock.pe || '--'}</span>
+                        </div>
+                        <div class="metric-item">
+                            <span class="metric-label">ROE</span>
+                            <span class="metric-value">${stock.roe ? stock.roe.toFixed(1) + '%' : '--'}</span>
+                        </div>
+                        <div class="metric-item">
+                            <span class="metric-label">ROCE</span>
+                            <span class="metric-value">${stock.roce ? stock.roce.toFixed(1) + '%' : '--'}</span>
+                        </div>
+                        <div class="metric-item">
+                            <span class="metric-label">D/E</span>
+                            <span class="metric-value">${stock.de !== undefined ? stock.de.toFixed(2) : '--'}</span>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        } else {
+            resultsEl.innerHTML = '<div class="empty-state"><span>📋</span><p>No stocks match this screen criteria</p></div>';
+            if (screenInfoEl) screenInfoEl.classList.add('hidden');
+        }
+    } catch (error) {
+        console.error('Screen error:', error);
+        resultsEl.innerHTML = '<div class="empty-state"><span>❌</span><p>Error running screen</p></div>';
+    }
+}
+
+
+// ===== RESEARCH CONSOLE =====
+
+function setupResearchConsole() {
+    const researchBtn = document.getElementById('researchBtn');
+    const researchInput = document.getElementById('researchSearchInput');
+
+    if (!researchBtn || !researchInput) return;
+
+    researchBtn.addEventListener('click', () => {
+        const symbol = researchInput.value.trim().toUpperCase();
+        if (symbol) {
+            loadResearchData(symbol);
+        }
+    });
+
+    researchInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            const symbol = researchInput.value.trim().toUpperCase();
+            if (symbol) {
+                loadResearchData(symbol);
+            }
+        }
+    });
+}
+
+async function loadResearchData(symbol) {
+    const consoleEl = document.getElementById('researchConsole');
+    const emptyEl = document.getElementById('researchEmpty');
+
+    try {
+        const response = await fetch(`${API_BASE}/api/research/${symbol}`);
+        const data = await response.json();
+
+        if (data.symbol) {
+            // Show console, hide empty state
+            consoleEl.classList.remove('hidden');
+            emptyEl.classList.add('hidden');
+
+            // Update header
+            document.getElementById('researchSymbol').textContent = data.symbol;
+            document.getElementById('researchName').textContent = data.name || data.symbol;
+            document.getElementById('researchSector').textContent = data.sector || 'General';
+
+            // Update price
+            if (data.stock_info) {
+                document.getElementById('researchPrice').textContent =
+                    `₹${data.stock_info.current_price?.toLocaleString() || '--'}`;
+                const change = data.stock_info.change_percent || 0;
+                const changeEl = document.getElementById('researchChange');
+                changeEl.textContent = `${change >= 0 ? '+' : ''}${change.toFixed(2)}%`;
+                changeEl.className = `change ${change >= 0 ? 'positive' : 'negative'}`;
+            }
+
+            // Update gauge
+            if (data.expert_recommendation) {
+                updateRecommendationGauge(data.expert_recommendation);
+            }
+
+            // Update fundamentals
+            if (data.fundamentals) {
+                document.getElementById('metricPE').textContent = data.fundamentals.pe || '--';
+                document.getElementById('metricPB').textContent = data.fundamentals.pb || '--';
+                document.getElementById('metricROE').textContent =
+                    data.fundamentals.roe ? `${data.fundamentals.roe}%` : '--';
+                document.getElementById('metricROCE').textContent =
+                    data.fundamentals.roce ? `${data.fundamentals.roce}%` : '--';
+                document.getElementById('metricDE').textContent =
+                    data.fundamentals.de !== undefined ? data.fundamentals.de.toFixed(2) : '--';
+                document.getElementById('metricDivYield').textContent =
+                    data.fundamentals.div_yield ? `${data.fundamentals.div_yield}%` : '--';
+            }
+
+            // Update news
+            if (data.recent_news && data.recent_news.length > 0) {
+                document.getElementById('researchNewsList').innerHTML = data.recent_news.map(n => `
+                    <div class="research-news-item">
+                        <a href="${n.link}" target="_blank">${n.title}</a>
+                        <span class="news-meta">${n.source} • ${n.sentiment}</span>
+                    </div>
+                `).join('');
+            } else {
+                document.getElementById('researchNewsList').innerHTML = '<p class="text-muted">No recent news</p>';
+            }
+
+            // Update related stocks
+            if (data.related_stocks && data.related_stocks.length > 0) {
+                document.getElementById('relatedStocks').innerHTML = data.related_stocks.map(s =>
+                    `<span class="stock-tag" style="cursor:pointer" onclick="loadResearchData('${s}')">${s}</span>`
+                ).join('');
+            }
+        }
+    } catch (error) {
+        console.error('Research error:', error);
+    }
+}
+
+function updateRecommendationGauge(recommendation) {
+    const score = recommendation.score || 50;
+    const signal = recommendation.signal || 'HOLD';
+    const confidence = recommendation.confidence || 50;
+    const factors = recommendation.factors || {};
+    const rationale = recommendation.rationale || 'No analysis available';
+
+    // Update gauge fill
+    const gaugeFill = document.getElementById('gaugeFill');
+    const arcLength = 251; // Total arc length
+    const offset = arcLength - (score / 100 * arcLength);
+
+    // Determine color class
+    let colorClass = 'hold';
+    if (signal.includes('BUY')) colorClass = 'buy';
+    else if (signal.includes('SELL')) colorClass = 'sell';
+
+    gaugeFill.className = `gauge-fill ${colorClass}`;
+    gaugeFill.style.strokeDashoffset = offset;
+
+    // Animate gauge
+    document.getElementById('recommendationGauge').classList.add('gauge-animated');
+
+    // Update score and label
+    document.getElementById('gaugeScore').textContent = Math.round(score);
+    const labelEl = document.getElementById('gaugeLabel');
+    labelEl.textContent = signal;
+    labelEl.className = `gauge-label ${colorClass}`;
+
+    // Update confidence
+    document.getElementById('gaugeConfidence').innerHTML =
+        `<span>Confidence:</span> <strong>${Math.round(confidence)}%</strong>`;
+
+    // Update rationale
+    document.getElementById('expertRationale').textContent = rationale;
+
+    // Update factor bars
+    updateFactorBars(factors);
+}
+
+function updateFactorBars(factors) {
+    const factorMap = {
+        'value': 'Value',
+        'growth': 'Growth',
+        'safety': 'Safety',
+        'technicals': 'Technicals',
+        'sentiment': 'Sentiment',
+        'quality': 'Quality'
+    };
+
+    for (const [key, label] of Object.entries(factorMap)) {
+        const value = factors[key] || 50;
+        const barEl = document.getElementById(`factor${label}`);
+        const scoreEl = document.getElementById(`factor${label}Score`);
+
+        if (barEl && scoreEl) {
+            barEl.style.width = `${value}%`;
+            barEl.className = `factor-bar-fill ${value >= 70 ? 'high' : value >= 40 ? 'medium' : 'low'}`;
+            scoreEl.textContent = Math.round(value);
+        }
+    }
+}
+function switchAnalysisTab(tabName) {
+    const buttons = document.querySelectorAll('.tab-btn');
+    buttons.forEach(btn => btn.classList.remove('active'));
+    if (event && event.currentTarget) {
+        event.currentTarget.classList.add('active');
+        buttons.forEach(btn => {
+            if (btn === event.currentTarget) {
+                btn.style.background = 'var(--bg-card)';
+                btn.style.color = 'var(--text-primary)';
+            } else {
+                btn.style.background = 'transparent';
+                btn.style.color = 'var(--text-secondary)';
+            }
+        });
+    }
+    ['rationale', 'bull', 'bear'].forEach(t => {
+        const id = 'tabContent' + t.charAt(0).toUpperCase() + t.slice(1);
+        const el = document.getElementById(id);
+        if (el) el.style.display = (t === tabName) ? 'block' : 'none';
+    });
+}
+
+// ===== Gemini AI Settings =====
+async function loadGeminiConfig() {
+    try {
+        const data = await apiCall('/api/gemini/config');
+        if (data.model) {
+            const modelSelect = document.getElementById('geminiModel');
+            if (modelSelect) modelSelect.value = data.model;
+        }
+        if (data.has_key) {
+            const statusEl = document.getElementById('geminiSaveStatus');
+            if (statusEl) statusEl.textContent = '✓ API key configured';
+        }
+    } catch (e) {
+        console.log('Gemini config not loaded:', e);
+    }
+}
+
+async function saveGeminiConfig() {
+    const apiKey = document.getElementById('geminiApiKey').value;
+    const model = document.getElementById('geminiModel').value;
+    const statusEl = document.getElementById('geminiSaveStatus');
+
+    if (!apiKey) {
+        statusEl.textContent = '⚠️ Please enter an API key';
+        return;
+    }
+
+    statusEl.textContent = 'Saving...';
+
+    try {
+        await apiCall('/api/gemini/config', {
+            method: 'POST',
+            body: JSON.stringify({ api_key: apiKey, model: model })
+        });
+        statusEl.textContent = '✓ Saved successfully!';
+        document.getElementById('geminiApiKey').value = ''; // Clear for security
+    } catch (e) {
+        statusEl.textContent = '❌ Failed to save';
+    }
+}
+
+// Setup Gemini save button
+document.addEventListener('DOMContentLoaded', () => {
+    const saveBtn = document.getElementById('saveGeminiBtn');
+    if (saveBtn) saveBtn.addEventListener('click', saveGeminiConfig);
+
+    // Load current config when settings section is shown
+    const settingsNav = document.querySelector('[data-section="settings"]');
+    if (settingsNav) {
+        settingsNav.addEventListener('click', loadGeminiConfig);
+    }
+});
+
+// ===== AI Chatbot Logic =====
+document.addEventListener('DOMContentLoaded', () => {
+    const chatbotToggler = document.querySelector(".chatbot-toggler");
+    const closeBtn = document.querySelector(".close-btn");
+    const chatbox = document.querySelector(".chatbox");
+    const chatInput = document.querySelector(".chat-input textarea");
+    const sendChatBtn = document.querySelector(".chat-input span");
+
+    if (!chatbotToggler) return; // Guard clause if elements missing
+
+    let userMessage = null;
+    const inputInitHeight = chatInput.scrollHeight;
+
+    const createChatLi = (message, className) => {
+        const chatLi = document.createElement("li");
+        chatLi.classList.add("chat", className);
+        let chatContent = className === "outgoing" ? `<p></p>` : `<span class="material-icons">smart_toy</span><p></p>`;
+        chatLi.innerHTML = chatContent;
+        chatLi.querySelector("p").innerText = message;
+        return chatLi;
+    }
+
+    const generateResponse = async (chatElement) => {
+        const API_URL = "/api/chat";
+        const messageElement = chatElement.querySelector("p");
+
+        try {
+            const response = await apiCall(API_URL, {
+                method: "POST",
+                body: JSON.stringify({ message: userMessage })
+            });
+
+            messageElement.innerText = response.response;
+        } catch (error) {
+            messageElement.classList.add("error");
+            messageElement.innerText = "Oops! Something went wrong. Make sure API key is set.";
+        } finally {
+            chatbox.scrollTo(0, chatbox.scrollHeight);
+        }
+    }
+
+    const handleChat = () => {
+        userMessage = chatInput.value.trim();
+        if (!userMessage) return;
+
+        chatInput.value = "";
+        chatInput.style.height = `${inputInitHeight}px`;
+
+        chatbox.appendChild(createChatLi(userMessage, "outgoing"));
+        chatbox.scrollTo(0, chatbox.scrollHeight);
+
+        const incomingChatLi = createChatLi("Thinking...", "incoming");
+        chatbox.appendChild(incomingChatLi);
+        chatbox.scrollTo(0, chatbox.scrollHeight);
+
+        generateResponse(incomingChatLi);
+    }
+
+    // Initialize global handler for suggestion chips
+    window.handleChip = (message) => {
+        const chatInput = document.querySelector(".chat-input textarea");
+        if (chatInput) {
+            chatInput.value = message;
+            // Trigger the handleChat logic
+            // We need to access the variables from this scope, or trigger click
+            const sendBtn = document.querySelector(".chat-input span");
+            if (sendBtn) sendBtn.click();
+        }
+    }
+
+    chatInput.addEventListener("input", () => {
+        chatInput.style.height = `${inputInitHeight}px`;
+        chatInput.style.height = `${chatInput.scrollHeight}px`;
+    });
+
+    chatInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" && !e.shiftKey && window.innerWidth > 800) {
+            e.preventDefault();
+            handleChat();
+        }
+    });
+
+    sendChatBtn.addEventListener("click", handleChat);
+    closeBtn.addEventListener("click", () => document.body.classList.remove("show-chatbot"));
+    chatbotToggler.addEventListener("click", () => document.body.classList.toggle("show-chatbot"));
+});
+
+// ===== System Controls Logic =====
+async function initSystemControls() {
+    const sysToggle = document.getElementById('systemToggle');
+    const aiToggle = document.getElementById('aiToggle');
+
+    if (!sysToggle || !aiToggle) return;
+
+    // Load initial status
+    try {
+        const status = await apiCall('/api/system/status');
+        sysToggle.checked = status.system_monitoring;
+        aiToggle.checked = status.ai_features;
+    } catch (e) {
+        console.error("Failed to load system status:", e);
+    }
+
+    // Handle changes
+    const updateControl = async () => {
+        try {
+            await apiCall('/api/system/control', {
+                method: 'POST',
+                body: JSON.stringify({
+                    system_monitoring: sysToggle.checked,
+                    ai_features: aiToggle.checked
+                })
+            });
+            showToast('System settings updated', 'success');
+        } catch (e) {
+            console.error("Failed to update system status:", e);
+            showToast('Failed to update settings', 'error');
+            // Revert on failure
+            try {
+                const status = await apiCall('/api/system/status');
+                sysToggle.checked = status.system_monitoring;
+                aiToggle.checked = status.ai_features;
+            } catch (err) { }
+        }
+    };
+
+    sysToggle.addEventListener('change', updateControl);
+    aiToggle.addEventListener('change', updateControl);
+}
+
+document.addEventListener('DOMContentLoaded', initSystemControls);
+
+// Simple Toast Notification
+function showToast(message, type = 'info') {
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    toast.innerText = message;
+
+    // Add toast styles dynamically if not present
+    if (!document.getElementById('toast-style')) {
+        const style = document.createElement('style');
+        style.id = 'toast-style';
+        style.innerHTML = `
+            .toast {
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                background: #333;
+                color: white;
+                padding: 12px 24px;
+                border-radius: 8px;
+                z-index: 2000;
+                animation: slideInToast 0.3s ease-out;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+            }
+            .toast.success { background: #10B981; }
+            .toast.error { background: #EF4444; }
+            @keyframes slideInToast {
+                from { transform: translateX(100%); opacity: 0; }
+                to { transform: translateX(0); opacity: 1; }
+            }
+        `;
+        document.head.appendChild(style);
+    }
+
+    document.body.appendChild(toast);
+    setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateY(-20px)';
+        toast.style.transition = 'all 0.3s';
+        setTimeout(() => toast.remove(), 300);
+    }, 3000);
+}
+
+// ===== Omnibar Logic (Search + Chat) =====
+let availableStocks = [];
+
+async function initOmnibar() {
+    const input = document.getElementById('omnibarInput');
+    const datalist = document.getElementById('stockSuggestions');
+    if (!input) return;
+
+    // Fetch stock list for autocomplete
+    try {
+        const response = await apiCall('/api/stocks/list');
+        if (Array.isArray(response)) {
+            availableStocks = response;
+            if (datalist) {
+                datalist.innerHTML = response.map(s =>
+                    `<option value="${s.symbol}">${s.name}</option>`
+                ).join('');
+            }
+        }
+    } catch (e) {
+        console.error("Failed to fetch stock list", e);
+    }
+
+    // Handle Enter key
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            handleOmnibarSubmit(input.value);
+        }
+    });
+
+    // Handle shortcuts (Cmd/Ctrl + K)
+    document.addEventListener('keydown', (e) => {
+        if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+            e.preventDefault();
+            input.focus();
+        }
+    });
+}
+
+function handleOmnibarSubmit(query) {
+    if (!query) return;
+    const cleanQuery = query.trim().toUpperCase();
+
+    // Check if it's a stock symbol match (Symbol or 'Symbol Name')
+    // We check if the input starts with a known symbol
+    const stockMatch = availableStocks.find(s =>
+        cleanQuery === s.symbol ||
+        cleanQuery.startsWith(s.symbol + " ") ||
+        s.name.toUpperCase().includes(cleanQuery) // Basic fuzzy
+    );
+
+    // Exact symbol match check
+    const exactMatch = availableStocks.find(s => s.symbol === cleanQuery);
+
+    // If it looks like a symbol (3-10 chars, no spaces) or exact match
+    const isSymbolLike = /^[A-Z0-9]{3,10}$/.test(cleanQuery);
+
+    if (exactMatch || (isSymbolLike && !query.includes(' '))) {
+        // It is likely a stock -> Open Analysis
+        const symbol = exactMatch ? exactMatch.symbol : cleanQuery;
+        openStockDetail(symbol);
+    } else {
+        // Treat as Chat Question
+        toggleChat(true); // Open chat window
+
+        // Send message to chat
+        const chatInput = document.getElementById('chatInput');
+        if (chatInput) {
+            chatInput.value = query; // Set value
+            // Trigger send button click
+            // We need a small delay to ensure chat window open animation
+            setTimeout(() => {
+                const sendBtn = document.getElementById('sendChatBtn');
+                if (sendBtn) sendBtn.click();
+            }, 100);
+        }
+    }
+}
