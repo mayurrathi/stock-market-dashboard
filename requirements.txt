@@ -1,0 +1,27 @@
+# Core dependencies for Stock Market Dashboard
+fastapi
+uvicorn[standard]
+sqlalchemy
+pydantic
+
+# Telegram integration
+telethon
+python-telegram-bot
+
+# HTTP/Async/RSS
+aiohttp
+httpx
+feedparser
+
+# Auth
+python-jose[cryptography]
+passlib[bcrypt]
+python-multipart
+
+# Data processing
+requests
+beautifulsoup4
+
+# AI & Sentiment
+vaderSentiment
+google-generativeai

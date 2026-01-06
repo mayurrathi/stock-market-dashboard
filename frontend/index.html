@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stock Market Dashboard</title>
+    <meta name="description" content="Real-time stock signal analyzer with Telegram monitoring and BSE/NSE correlation">
+    <link rel="stylesheet" href="/static/styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap"
+        rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+
+<body>
+    <div class="app">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="logo">
+                <span class="logo-icon">📈</span>
+                <h1>StockPulse</h1>
+            </div>
+
+            <nav class="nav">
+                <a href="#" class="nav-item active" data-section="dashboard">
+                    <span class="nav-icon">🏠</span>
+                    Dashboard
+                </a>
+                <a href="#" class="nav-item" data-section="overview">
+                    <span class="nav-icon">🌐</span>
+                    Market Overview
+                </a>
+                <a href="#" class="nav-item" data-section="watchlist">
+                    <span class="nav-icon">⭐</span>
+                    Watchlist
+                </a>
+                <a href="#" class="nav-item" data-section="messages">
+                    <span class="nav-icon">💬</span>
+                    Signals
+                </a>
+                <a href="#" class="nav-item" data-section="news">
+                    <span class="nav-icon">📰</span>
+                    Market News
+                </a>
+                <a href="#" class="nav-item" data-section="recommendations">
+                    <span class="nav-icon">🎯</span>
+                    Recommendations
+                </a>
+                <a href="#" class="nav-item" data-section="sources">
+                    <span class="nav-icon">📡</span>
+                    Sources
+                </a>
+                <a href="#" class="nav-item" data-section="settings">
+                    <span class="nav-icon">⚙️</span>
+                    Settings
+                </a>
+            </nav>
+
+            <div class="telegram-status" id="telegramStatus">
+                <span class="status-dot disconnected"></span>
+                <span>Telegram: Disconnected</span>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Header with Calendar Filter -->
+            <header class="header">
+                <div class="header-left">
+                    <h2 id="sectionTitle">Dashboard</h2>
+                </div>
+
+                <div class="header-center">
+                    <!-- Filters moved to specific sections -->
+                </div>
+
+                <div class="header-right">
+                    <!-- Date range moved to specific sections -->
+                </div>
+            </header>
+
+            <!-- Dashboard Section -->
+            <section class="section" id="dashboard-section">
+                <!-- ⭐ All Star Picks - Top 10 for Next Day -->
+                <div class="allstar-section" id="allstarSection">
+                    <div class="section-header">
+                        <div class="header-main-group">
+                            <h3>⭐ All Star Picks - Today's Top 10</h3>
+                            <button class="btn btn-icon-round refresh-btn" onclick="refreshCurrentSection()">🔄</button>
+                        </div>
+                        <div id="allstarTimer" class="refresh-timer">Refreshing in: 3:30 PM</div>
+                    </div>
+                    <div class="allstar-container">
+                        <div class="allstar-picks" id="allstarPicks">
+                            <div class="empty-state"><span class="loading"></span>
+                                <p>Loading All Star picks...</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Market Indices -->
+                <div class="indices-container">
+                    <button class="scroll-btn left" onclick="scrollContainer('indicesRow', -400)">‹</button>
+                    <div class="indices-row" id="indicesRow">
+                        <div class="index-card nifty" id="niftyCard">
+                            <div class="index-name">NIFTY 50</div>
+                            <div class="index-value">--</div>
+                            <div class="index-change">--</div>
+                        </div>
+                        <div class="index-card sensex" id="sensexCard">
+                            <div class="index-name">SENSEX</div>
+                            <div class="index-value">--</div>
+                            <div class="index-change">--</div>
+                        </div>
+                        <div class="index-card banknifty" id="bankniftyCard">
+                            <div class="index-name">BANK NIFTY</div>
+                            <div class="index-value">--</div>
+                            <div class="index-change">--</div>
+                        </div>
+                    </div>
+                    <button class="scroll-btn right" onclick="scrollContainer('indicesRow', 400)">›</button>
+                </div>
+
+                <!-- Stats Cards -->
+                <div class="stats-row">
+                    <div class="stat-card">
+                        <div class="stat-icon">💬</div>
+                        <div class="stat-info">
+                            <div class="stat-value" id="statMessages">0</div>
+                            <div class="stat-label">Signals Today</div>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon">📰</div>
+                        <div class="stat-info">
+                            <div class="stat-value" id="statNews">0</div>
+                            <div class="stat-label">News Articles</div>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon">📡</div>
+                        <div class="stat-info">
+                            <div class="stat-value" id="statSources">0</div>
+                            <div class="stat-label">Active Sources</div>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon">🎯</div>
+                        <div class="stat-info">
+                            <div class="stat-value" id="statRecommendations">0</div>
+                            <div class="stat-label">Recommendations</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Quick Actions -->
+                <div class="actions-row">
+                    <button class="btn btn-action" id="fetchNewsBtn">
+                        <span>📰</span> Fetch News
+                    </button>
+                    <button class="btn btn-action" id="fetchPricesBtn">
+                        <span>💹</span> Update Prices
+                    </button>
+                    <button class="btn btn-action btn-primary" id="analyzeBtn">
+                        <span>🔍</span> Analyze & Recommend
+                    </button>
+
+                    <div class="auto-refresh-control">
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="autoRefreshToggle">
+                            <span class="toggle-slider"></span>
+                        </label>
+                        <span class="toggle-label">Auto (32s)</span>
+                    </div>
+                </div>
+
+                <!-- Recommendations Preview -->
+                <div class="recommendations-preview">
+                    <h3>📊 Latest Recommendations</h3>
+                    <div class="timeframe-tabs">
+                        <button class="timeframe-tab active" data-tf="next_day">Next Day</button>
+                        <button class="timeframe-tab" data-tf="next_week">Next Week</button>
+                        <button class="timeframe-tab" data-tf="next_month">Next Month</button>
+                        <button class="timeframe-tab" data-tf="1yr">1 Year</button>
+                        <button class="timeframe-tab" data-tf="2yr">2 Years</button>
+                        <button class="timeframe-tab" data-tf="5yr">5 Years</button>
+                        <button class="timeframe-tab" data-tf="10yr">10 Years</button>
+                    </div>
+                    <div class="recommendations-grid" id="recommendationsGrid">
+                        <div class="empty-state">
+                            <span>🔍</span>
+                            <p>Click "Analyze & Recommend" to generate recommendations</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Market Overview Section -->
+            <section class="section hidden" id="overview-section">
+                <div class="section-header">
+                    <div class="header-main-group">
+                        <h3>🌐 Market Overview (24hr News-Based)</h3>
+                        <button class="btn btn-icon-round refresh-btn" onclick="refreshCurrentSection()">🔄</button>
+                    </div>
+                    <button class="btn btn-primary" id="analyzeMarketBtn">🔍 Analyze Market</button>
+                </div>
+
+                <div class="overview-grid" id="overviewContent">
+                    <div class="empty-state">
+                        <span>🌐</span>
+                        <p>Loading market overview...</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Watchlist Section -->
+            <section class="section hidden" id="watchlist-section">
+                <div class="section-header">
+                    <div class="header-main-group">
+                        <h3>⭐ My Watchlist</h3>
+                        <button class="btn btn-icon-round refresh-btn" onclick="refreshCurrentSection()">🔄</button>
+                    </div>
+                    <button class="btn btn-primary" id="addWatchlistBtn">+ Add Stock</button>
+                </div>
+
+                <div class="watchlist-grid" id="watchlistGrid">
+                    <div class="empty-state">
+                        <span>⭐</span>
+                        <p>Your watchlist is empty. Add stocks to monitor.</p>
+                    </div>
+                </div>
+
+                <!-- Add to Watchlist Modal -->
+                <div class="modal hidden" id="addWatchlistModal">
+                    <div class="modal-content">
+                        <h3>Add Stock to Watchlist</h3>
+                        <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 16px;">
+                            💡 Leave target/stoploss empty for auto-calculated values based on volatility analysis
+                        </p>
+                        <form id="addWatchlistForm">
+                            <div class="form-group">
+                                <label>Stock Symbol</label>
+                                <div class="autocomplete-wrapper" style="position: relative;">
+                                    <input type="text" id="watchlistSymbol"
+                                        placeholder="Type to search... e.g., Reliance, TCS" autocomplete="off" required>
+                                    <div id="stockSuggestions" class="autocomplete-dropdown"
+                                        style="display: none; position: absolute; top: 100%; left: 0; right: 0; background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: var(--radius-sm); max-height: 250px; overflow-y: auto; z-index: 1000; box-shadow: 0 8px 24px rgba(0,0,0,0.3);">
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label>Target Price <span
+                                        style="color: var(--text-muted); font-weight: 400;">(auto-calculated if
+                                        empty)</span></label>
+                                <input type="number" id="watchlistTarget"
+                                    placeholder="Auto-calculated based on analysis" step="0.01">
+                            </div>
+                            <div class="form-group">
+                                <label>Stop Loss (optional)</label>
+                                <input type="number" id="watchlistStopLoss" placeholder="e.g., 2200" step="0.01">
+                            </div>
+                            <div class="form-group">
+                                <label>Notes (optional)</label>
+                                <textarea id="watchlistNotes" rows="2" placeholder="Your analysis notes..."></textarea>
+                            </div>
+                            <div class="modal-actions">
+                                <button type="button" class="btn btn-secondary" id="cancelWatchlist">Cancel</button>
+                                <button type="submit" class="btn btn-primary">Add to Watchlist</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- Stock Detail Modal (Universal) -->
+                <div class="modal hidden" id="stockDetailModal">
+                    <div class="modal-content stock-detail-modal">
+                        <div class="stock-detail-header">
+                            <div class="stock-title-block">
+                                <h3 id="stockDetailTitle">Loading...</h3>
+                                <span class="stock-category-badge" id="stockCategoryBadge"></span>
+                            </div>
+                            <button type="button" class="modal-close-btn" id="closeStockDetail">×</button>
+                        </div>
+
+                        <div class="stock-detail-body">
+                            <!-- Price Overview -->
+                            <div class="stock-price-overview" id="stockPriceOverview">
+                                <div class="current-price-block">
+                                    <span class="price-label">Current Price</span>
+                                    <span class="price-value" id="stockCurrentPrice">--</span>
+                                    <span class="price-change" id="stockPriceChange">--</span>
+                                </div>
+                                <div class="price-range">
+                                    <div><span>Day Low</span><strong id="stockDayLow">--</strong></div>
+                                    <div><span>Day High</span><strong id="stockDayHigh">--</strong></div>
+                                    <div><span>Prev Close</span><strong id="stockPrevClose">--</strong></div>
+                                </div>
+                            </div>
+
+                            <!-- Target & Stop Loss -->
+                            <div class="stock-targets" id="stockTargets">
+                                <div class="target-card target">
+                                    <span class="target-label">🎯 Target</span>
+                                    <span class="target-value" id="stockTarget">--</span>
+                                    <span class="target-percent" id="stockTargetPercent">--</span>
+                                </div>
+                                <div class="target-card stoploss">
+                                    <span class="target-label">🛑 Stop Loss</span>
+                                    <span class="target-value" id="stockStopLoss">--</span>
+                                    <span class="target-percent" id="stockSLPercent">--</span>
+                                </div>
+                            </div>
+
+                            <!-- Price Chart -->
+                            <div class="stock-chart-container">
+                                <h4>📈 Price History (30 Days)</h4>
+                                <canvas id="stockChart" height="150"></canvas>
+                            </div>
+
+                            <!-- Key Ratios -->
+                            <div class="stock-ratios">
+                                <h4>📊 Key Ratios</h4>
+                                <div class="ratios-grid" id="stockRatiosGrid">
+                                    <!-- Populated by JS -->
+                                </div>
+                            </div>
+
+                            <!-- Recommendations -->
+                            <div class="stock-recommendations" id="stockRecsSection">
+                                <h4>💡 AI Recommendations</h4>
+                                <div class="recs-list" id="stockRecsList"></div>
+                            </div>
+
+                            <!-- External Links -->
+                            <div class="stock-external-links">
+                                <h4>🔗 Research Links</h4>
+                                <div class="links-row" id="stockExternalLinks"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Messages Section -->
+            <section class="section hidden" id="messages-section">
+                <div class="section-header">
+                    <div class="header-main-group">
+                        <h3>📡 Telegram Signals</h3>
+                        <button class="btn btn-icon-round refresh-btn" onclick="refreshCurrentSection()">🔄</button>
+                        <div class="search-box">
+                            <input type="text" id="messageSearch" placeholder="Search signals...">
+                        </div>
+                    </div>
+                    <div class="header-filter-group">
+                        <div class="time-shortcuts">
+                            <button class="shortcut-btn" data-shortcut="last_hour">Hr</button>
+                            <button class="shortcut-btn" data-shortcut="today">Today</button>
+                            <button class="shortcut-btn active" data-shortcut="last_day">24h</button>
+                            <button class="shortcut-btn" data-shortcut="last_week">Wk</button>
+                            <button class="shortcut-btn" data-shortcut="last_month">Mo</button>
+                        </div>
+                        <div class="date-range">
+                            <input type="datetime-local" id="startDate" class="date-input-flat" placeholder="From">
+                            <input type="datetime-local" id="endDate" class="date-input-flat" placeholder="To">
+                            <button class="btn btn-sm btn-primary applyDateRange">Apply</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="messages-list" id="messagesList">
+                    <div class="empty-state">
+                        <span>💬</span>
+                        <p>No messages yet. Add sources and fetch messages.</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- News Section -->
+            <section class="section hidden" id="news-section">
+                <div class="section-header">
+                    <div class="header-main-group">
+                        <h3>📰 Market News</h3>
+                        <button class="btn btn-icon-round refresh-btn" onclick="refreshCurrentSection()">🔄</button>
+                        <button class="btn btn-secondary" id="refreshNewsBtn">Fetch</button>
+                    </div>
+                    <div class="header-filter-group">
+                        <div class="time-shortcuts">
+                            <button class="shortcut-btn" data-shortcut="last_hour">Hr</button>
+                            <button class="shortcut-btn" data-shortcut="today">Today</button>
+                            <button class="shortcut-btn active" data-shortcut="last_day">24h</button>
+                            <button class="shortcut-btn" data-shortcut="last_week">Wk</button>
+                        </div>
+                        <div class="date-range">
+                            <input type="datetime-local" id="startDateNews" class="date-input-flat" placeholder="From">
+                            <input type="datetime-local" id="endDateNews" class="date-input-flat" placeholder="To">
+                            <button class="btn btn-sm btn-primary applyDateRange">Apply</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="news-list" id="newsList">
+                    <div class="empty-state">
+                        <span>📰</span>
+                        <p>No news articles. Click "Fetch News" to load latest news.</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Recommendations Section -->
+            <section class="section hidden" id="recommendations-section">
+                <div class="section-header" style="margin-bottom: 12px;">
+                    <div class="header-main-group">
+                        <h3>📊 Analysis & Recommendations</h3>
+                        <button class="btn btn-icon-round refresh-btn" onclick="refreshCurrentSection()">🔄</button>
+                    </div>
+                </div>
+                <div class="disclaimer">
+                    ⚠️ <strong>Disclaimer:</strong> These recommendations are generated by AI analysis of market signals
+                    and news. This is NOT financial advice. Always do your own research before investing.
+                </div>
+
+                <div class="recommendations-full">
+                    <div class="timeframe-cards">
+                        <div class="tf-card" id="tf-next_day">
+                            <h4>📅 Next Day</h4>
+                            <div class="tf-recs"></div>
+                        </div>
+                        <div class="tf-card" id="tf-next_week">
+                            <h4>📆 Next Week</h4>
+                            <div class="tf-recs"></div>
+                        </div>
+                        <div class="tf-card" id="tf-next_month">
+                            <h4>🗓️ Next Month</h4>
+                            <div class="tf-recs"></div>
+                        </div>
+                        <div class="tf-card" id="tf-1yr">
+                            <h4>📊 1 Year</h4>
+                            <div class="tf-recs"></div>
+                        </div>
+                        <div class="tf-card" id="tf-2yr">
+                            <h4>📈 2 Years</h4>
+                            <div class="tf-recs"></div>
+                        </div>
+                        <div class="tf-card" id="tf-5yr">
+                            <h4>🚀 5 Years</h4>
+                            <div class="tf-recs"></div>
+                        </div>
+                        <div class="tf-card" id="tf-10yr">
+                            <h4>🌟 10 Years</h4>
+                            <div class="tf-recs"></div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Sources Section -->
+            <section class="section hidden" id="sources-section">
+                <div class="section-header">
+                    <h3>📡 Telegram Sources</h3>
+                    <button class="btn btn-primary" id="addSourceBtn">+ Add Source</button>
+                </div>
+
+                <div class="sources-list" id="sourcesList">
+                    <div class="empty-state">
+                        <span>📡</span>
+                        <p>No sources configured. Add Telegram channels to monitor.</p>
+                    </div>
+                </div>
+
+                <!-- Add Source Modal -->
+                <div class="modal hidden" id="addSourceModal">
+                    <div class="modal-content">
+                        <h3>Add Telegram Source</h3>
+                        <form id="addSourceForm">
+                            <div class="form-group">
+                                <label>Source Name</label>
+                                <input type="text" id="sourceName" placeholder="e.g., Stock Tips Channel" required>
+                            </div>
+                            <div class="form-group">
+                                <label>Channel Username</label>
+                                <input type="text" id="channelUsername" placeholder="e.g., @stocktips" required>
+                            </div>
+                            <div class="modal-actions">
+                                <button type="button" class="btn btn-secondary" id="cancelAddSource">Cancel</button>
+                                <button type="submit" class="btn btn-primary">Add Source</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Settings Section -->
+            <section class="section hidden" id="settings-section">
+                <div class="settings-grid">
+                    <!-- Telegram Auth -->
+                    <div class="settings-card">
+                        <h3>📱 Telegram Authentication</h3>
+                        <div id="telegramAuth">
+                            <div class="form-group">
+                                <label>API ID</label>
+                                <input type="text" id="apiId" placeholder="Your Telegram API ID">
+                            </div>
+                            <div class="form-group">
+                                <label>API Hash</label>
+                                <input type="password" id="apiHash" placeholder="Your Telegram API Hash">
+                            </div>
+                            <div class="form-group">
+                                <label>Phone Number</label>
+                                <input type="text" id="phoneNumber" placeholder="+91XXXXXXXXXX">
+                            </div>
+                            <button class="btn btn-primary" id="sendCodeBtn">Send Code</button>
+
+                            <div class="verify-section hidden" id="verifySection">
+                                <div class="form-group">
+                                    <label>Verification Code</label>
+                                    <input type="text" id="verifyCode" placeholder="Enter code from Telegram">
+                                </div>
+                                <button class="btn btn-primary" id="verifyCodeBtn">Verify</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Info -->
+                    <div class="settings-card">
+                        <h3>ℹ️ How to Get Telegram API Credentials</h3>
+                        <ol>
+                            <li>Go to <a href="https://my.telegram.org" target="_blank">my.telegram.org</a></li>
+                            <li>Log in with your phone number</li>
+                            <li>Click on "API Development Tools"</li>
+                            <li>Create a new application</li>
+                            <li>Copy your API ID and API Hash</li>
+                        </ol>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+
+</html>
