@@ -171,6 +171,27 @@ class AllStarPick(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
+class PickHistory(Base):
+    """Historical record of all Top Picks for 30-day tracking and exit analysis"""
+    __tablename__ = "pick_history"
+    id = Column(Integer, primary_key=True, index=True)
+    symbol = Column(String, index=True, nullable=False)
+    name = Column(String, nullable=True)
+    category = Column(String, nullable=True)
+    recommended_price = Column(Float, nullable=True)  # Price when first recommended
+    recommended_date = Column(DateTime(timezone=True), nullable=False)  # When added to Top Picks
+    original_target = Column(Float, nullable=True)
+    original_stop_loss = Column(Float, nullable=True)
+    original_confidence = Column(Float, nullable=True)
+    original_reasoning = Column(Text, nullable=True)
+    current_action = Column(String, default="HOLD")  # BUY/SELL/HOLD based on analysis
+    sell_reason = Column(Text, nullable=True)  # Why to sell
+    exited_at = Column(DateTime(timezone=True), nullable=True)  # When sold/exited
+    exit_price = Column(Float, nullable=True)  # Price at exit
+    is_active = Column(Boolean, default=True)  # False after exit or 30 days
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
 # Sector classification for Indian stocks
 SECTOR_MAPPING = {
     # IT

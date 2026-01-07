@@ -56,6 +56,10 @@
                     <span class="material-icons nav-icon-material">star</span>
                     <span>All Star Picks</span>
                 </div>
+                <div class="nav-item" data-section="exittracker">
+                    <span class="material-icons nav-icon-material">exit_to_app</span>
+                    <span>Exit Tracker</span>
+                </div>
                 <div class="nav-item" data-section="screener">
                     <span class="material-icons nav-icon-material">filter_alt</span>
                     <span>Stock Screener</span>
@@ -575,6 +579,41 @@
                     <div class="empty-state">
                         <span>📋</span>
                         <p>Select a screen from the dropdown above to find matching stocks</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Exit Tracker Section -->
+            <section class="section hidden" id="exittracker-section">
+                <div class="section-header">
+                    <div class="header-main-group">
+                        <h3>🚪 Exit Tracker - Portfolio Analysis</h3>
+                        <button class="btn btn-icon-round refresh-btn" onclick="loadExitTracker()">🔄</button>
+                    </div>
+                </div>
+
+                <div
+                    style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px;">
+                    <div class="stat-card"
+                        style="background: rgba(30,30,30,0.4); padding: 16px; border-radius: 12px; border: 1px solid var(--border-color);">
+                        <div style="font-size: 13px; color: var(--text-muted); margin-bottom: 4px;">Active Picks Tracked
+                        </div>
+                        <div id="exitActiveCount" style="font-size: 24px; font-weight: 600;">--</div>
+                        <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">Last 30 Days</div>
+                    </div>
+                    <div class="stat-card"
+                        style="background: rgba(239,68,68,0.1); padding: 16px; border-radius: 12px; border: 1px solid rgba(239,68,68,0.3);">
+                        <div style="font-size: 13px; color: #fca5a5; margin-bottom: 4px;">Sell Signals</div>
+                        <div id="exitSellCount" style="font-size: 24px; font-weight: 600; color: #ef4444;">--</div>
+                        <div style="font-size: 11px; color: #fca5a5; margin-top: 4px;">Action Required</div>
+                    </div>
+                </div>
+
+                <div class="allstar-container">
+                    <div class="allstar-picks" id="exitTrackerPicks">
+                        <div class="empty-state"><span class="loading"></span>
+                            <p>Analyzing historical picks...</p>
+                        </div>
                     </div>
                 </div>
             </section>
@@ -1260,23 +1299,41 @@
                                     style="display: flex; gap: 2px; background: rgba(255,255,255,0.05); padding: 2px; border-radius: 8px; margin-bottom: 16px;">
                                     <button class="tab-btn active" onclick="switchAnalysisTab('rationale')"
                                         style="flex:1; padding: 8px; border: none; background: var(--bg-card); border-radius: 6px; color: var(--text-primary); font-size: 12px; font-weight: 600; cursor: pointer;">Rationale</button>
-                                    <button class="tab-btn" onclick="switchAnalysisTab('bull')"
+                                    <button class="tab-btn" onclick="switchAnalysisTab('bull_case')"
                                         style="flex:1; padding: 8px; border: none; background: transparent; border-radius: 6px; color: var(--text-secondary); font-size: 12px; font-weight: 600; cursor: pointer;">Bull
                                         Case 🐂</button>
-                                    <button class="tab-btn" onclick="switchAnalysisTab('bear')"
+                                    <button class="tab-btn" onclick="switchAnalysisTab('bear_case')"
                                         style="flex:1; padding: 8px; border: none; background: transparent; border-radius: 6px; color: var(--text-secondary); font-size: 12px; font-weight: 600; cursor: pointer;">Bear
                                         Case 🐻</button>
+                                    <button class="tab-btn" onclick="switchAnalysisTab('risk')"
+                                        style="flex:1; padding: 8px; border: none; background: transparent; border-radius: 6px; color: var(--text-secondary); font-size: 12px; font-weight: 600; cursor: pointer;">Risk
+                                        ⚠️</button>
                                 </div>
 
                                 <div id="tabContentRationale" class="tab-content" style="display: block;">
                                     <div class="rec-rationale" id="recRationale"
                                         style="font-size: 14px; line-height: 1.6; color: var(--text-primary); margin-bottom: 20px; font-style: italic; background: rgba(255,255,255,0.02); padding: 12px; border-radius: 8px; border-left: 3px solid var(--accent-primary);">
                                     </div>
+
+                                    <!-- Technical Indicators Grid (New) -->
+                                    <div id="recTechnicalGrid"
+                                        style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 16px;">
+                                    </div>
                                 </div>
 
                                 <div id="tabContentBull" class="tab-content" style="display: none;">
                                     <ul id="recBullList" style="list-style: none; margin-bottom: 20px; padding: 0;">
                                     </ul>
+                                </div>
+
+                                <div id="tabContentBear" class="tab-content" style="display: none;">
+                                    <ul id="recBearList" style="list-style: none; margin-bottom: 20px; padding: 0;">
+                                    </ul>
+                                </div>
+
+                                <div id="tabContentRisk" class="tab-content" style="display: none;">
+                                    <div id="recRiskMetrics"
+                                        style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px;"></div>
                                 </div>
 
                                 <div id="tabContentBear" class="tab-content" style="display: none;">

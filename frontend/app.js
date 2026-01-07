@@ -125,6 +125,7 @@ function switchSection(section) {
     }
     if (section === 'watchlist') loadWatchlist();
     if (section === 'allstar') loadAllStarPicksPage();
+    if (section === 'exittracker') loadExitTracker();
     if (section === 'settings') loadSettings();
     if (section === 'ai') initAiAssistant();
     if (section === 'research') {
@@ -732,7 +733,108 @@ async function loadAllStarPicksPage() {
     }
 }
 
-async function loadLiveSignals() {
+// Load Exit Tracker - track historical picks 30 days
+async function loadExitTracker() {
+    const container = document.getElementById('exitTrackerPicks');
+    const timer = document.getElementById('exitTrackerTimer');
+    const activeStat = document.getElementById('exitActiveCount');
+    const sellStat = document.getElementById('exitSellCount');
+
+    if (!container) return;
+
+    // Show loading
+    container.innerHTML = '<div class="loading-state"><span>🔄</span><p>Analyzing portfolio...</p></div>';
+
+    try {
+        const data = await apiCall('/api/exit-tracker');
+
+        if (timer && (data.generated_at)) {
+            const dateObj = new Date(data.generated_at);
+            const timeStr = dateObj.toLocaleString('en-IN', { hour: '2-digit', minute: '2-digit' });
+            timer.textContent = `Analysis: Today • ${timeStr} IST`;
+        }
+
+        // Update stats
+        if (activeStat) activeStat.textContent = data.picks.length;
+        if (sellStat) sellStat.textContent = data.sell_count;
+
+        if (data.picks && data.picks.length > 0) {
+            container.innerHTML = data.picks.map((pick, index) => {
+                const isSell = pick.current_action === 'SELL';
+                const actionColor = isSell ? '#ef4444' : '#10b981';
+                const bgStyle = isSell ? 'border-left: 3px solid #ef4444;' : 'border-left: 3px solid #10b981;';
+                const gainClass = pick.performance_pct >= 0 ? 'text-green' : 'text-red';
+                const gainOperator = pick.performance_pct >= 0 ? '+' : '';
+
+                return `
+                <div class="allstar-card" data-symbol="${pick.symbol}" style="cursor: pointer; position: relative; ${bgStyle} padding-bottom: 8px;">
+                     <div style="position: absolute; top: 10px; right: 10px; font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 4px; background: ${isSell ? 'rgba(239,68,68,0.2)' : 'rgba(16,185,129,0.2)'}; color: ${actionColor};">
+                        ${pick.current_action}
+                     </div>
+                     
+                    <div class="allstar-main" style="margin-bottom: 8px;">
+                        <div class="allstar-symbol" style="font-size: 16px;">${pick.symbol}</div>
+                        <div class="allstar-category" style="font-size: 11px;">${pick.category} • Held ${pick.days_held}d</div>
+                    </div>
+                    
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 8px; padding: 8px; background: rgba(255,255,255,0.03); border-radius: 6px;">
+                        <div>
+                            <div style="font-size: 10px; color: var(--text-muted);">Entry</div>
+                            <div style="font-size: 13px;">₹${pick.recommended_price?.toLocaleString('en-IN')}</div>
+                            <div style="font-size: 10px; color: var(--text-muted);">${pick.recommended_date}</div>
+                        </div>
+                        <div style="text-align: right;">
+                            <div style="font-size: 10px; color: var(--text-muted);">Current</div>
+                            <div style="font-size: 13px;">₹${pick.current_price?.toLocaleString('en-IN')}</div>
+                            <div style="font-size: 11px; font-weight: 600;" class="${gainClass}">${gainOperator}${pick.performance_pct}%</div>
+                        </div>
+                    </div>
+                    
+                    ${isSell && pick.sell_reason ? `
+                    <div style="font-size: 11px; padding: 6px; background: rgba(239,68,68,0.1); border-left: 2px solid #ef4444; color: #fca5a5; margin-top: 4px;">
+                        ${pick.sell_reason}
+                    </div>
+                    ` : ''}
+                    
+                    ${!isSell && pick.original_target ? `
+                    <div style="display: flex; gap: 8px; font-size: 11px; margin-top: 4px; color: var(--text-muted);">
+                        <span>T: ₹${pick.original_target}</span>
+                        <span>SL: ₹${pick.original_stop_loss}</span>
+                    </div>
+                    ` : ''}
+                </div>
+            `;
+            }).join('');
+        } else {
+            container.innerHTML = '<div class="empty-state"><span>📊</span><p>No historical picks available yet. Check back tomorrow!</p></div>';
+        }
+    } catch (error) {
+        console.error('Failed to load Exit Tracker:', error);
+        container.innerHTML = '<div class="empty-state"><span>⚠️</span><p>Failed to load portfolio</p></div>';
+    }
+}
+
+// Pagination State
+let currentSignalPage = 1;
+let currentNewsPage = 1;
+
+function renderPaginationControls(currentPage, totalPages, type) {
+    const fn = type === 'signals' ? 'loadLiveSignals' : 'loadNews';
+    return `
+        <div class="pagination-controls" style="display: flex; justify-content: center; align-items: center; gap: 16px; margin-top: 24px; padding-top: 16px; border-top: 1px dashed var(--border-color);">
+            <button class="btn btn-secondary" ${currentPage <= 1 ? 'disabled style="opacity:0.5; cursor:not-allowed;"' : ''} onclick="${fn}(${currentPage - 1})">
+                ← Previous
+            </button>
+            <span style="color: var(--text-secondary); font-size: 13px; font-weight: 600;">Page ${currentPage} of ${totalPages}</span>
+            <button class="btn btn-secondary" ${currentPage >= totalPages ? 'disabled style="opacity:0.5; cursor:not-allowed;"' : ''} onclick="${fn}(${currentPage + 1})">
+                Next →
+            </button>
+        </div>
+    `;
+}
+
+async function loadLiveSignals(page = 1) {
+    currentSignalPage = page;
     const container = document.getElementById('liveSignalFeed');
     const countEl = document.getElementById('liveSignalCount');
     const updatedEl = document.getElementById('liveSignalUpdated');
@@ -740,7 +842,7 @@ async function loadLiveSignals() {
     if (!container) return;
 
     try {
-        const data = await apiCall('/api/signals/live?limit=20');
+        const data = await apiCall(`/api/signals/live?page=${page}&limit=40&days=7`);
 
         if (data.signals && data.signals.length > 0) {
             countEl.textContent = data.count;
@@ -782,6 +884,11 @@ async function loadLiveSignals() {
                     </div>
                 `;
             }).join('');
+
+            // Append Pagination
+            if (data.total_pages > 1) {
+                container.innerHTML += renderPaginationControls(data.page, data.total_pages, 'signals');
+            }
         } else {
             countEl.textContent = '0';
             container.innerHTML = '<div class="empty-state" style="flex: 1; text-align: center; padding: 24px; color: var(--text-muted);"><span>📡</span><p>No live signals in the last hour</p></div>';
@@ -826,10 +933,10 @@ async function refreshCurrentSection() {
         } else if (activeSection === 'sources') {
             await loadSources();
         }
-        showToast('Refreshed!', 'success');
+        showToast('Refreshed!', 'success', 0); // Persistent until dismissed
     } catch (e) {
         console.error("Refresh failed", e);
-        showToast('Refresh failed', 'error');
+        showToast('Refresh failed', 'error', 0);
     } finally {
         if (btn) {
             btn.disabled = false;
@@ -1004,10 +1111,11 @@ async function loadMessages() {
 
 // ===== News =====
 
-async function loadNews() {
+async function loadNews(page = 1) {
+    currentNewsPage = page;
     try {
         const params = getTimeParams();
-        const data = await apiCall(`/api/news?${params}&limit=30`);
+        const data = await apiCall(`/api/news?${params}&page=${page}&limit=40`);
         const list = document.getElementById('newsList');
 
         if (data.news.length === 0) {
@@ -1039,6 +1147,11 @@ async function loadNews() {
                 ${item.sentiment ? `<span class="sentiment-badge ${item.sentiment}">${item.sentiment}</span>` : ''}
             </div>
                 `).join('');
+
+        // Append Pagination
+        if (data.total_pages > 1) {
+            list.innerHTML += renderPaginationControls(data.page, data.total_pages, 'news');
+        }
 
     } catch (error) {
         console.error('Failed to load news:', error);
@@ -1715,7 +1828,7 @@ async function showStockDetail(symbol) {
         renderStockRecommendations(data.recommendations);
 
         // Render Advanced Recommendation
-        renderAdvancedRecommendation(data.advanced_recommendation);
+        renderAdvancedRecommendation(data.advanced_recommendation, data.ai_enabled);
 
         // Render external links
         renderExternalLinks(data.external_links, symbol);
@@ -1807,21 +1920,17 @@ function renderRatios(ratios) {
 }
 
 function renderStockRecommendations(recs) {
+    const section = document.getElementById('stockRecsSection');
     const container = document.getElementById('stockRecsList');
     if (!container) return;
 
     if (!recs || recs.length === 0) {
-        container.innerHTML = `
-            <div style="padding: 16px; background: rgba(255, 255, 255, 0.03); border-radius: 8px; border: 1px dashed var(--border-color);">
-                <p style="color: var(--text-muted); font-size: 13px; margin: 0;">
-                    💡 No AI recommendations currently available for this stock. 
-                    This usually happens if there hasn't been enough recent news coverage or Telegram signals for a detailed analysis.
-                </p>
-                <button class="btn btn-secondary" onclick="refreshCurrentSection()" style="margin-top: 12px; font-size: 12px; padding: 4px 12px;">🔍 Analyze Market News</button>
-            </div>
-        `;
+        if (section) section.style.display = 'none';
+        container.innerHTML = '';
         return;
     }
+
+    if (section) section.style.display = 'block';
 
     container.innerHTML = recs.map(r => `
         <div class="rec-row">
@@ -1833,7 +1942,7 @@ function renderStockRecommendations(recs) {
     `).join('');
 }
 
-function renderAdvancedRecommendation(data) {
+function renderAdvancedRecommendation(data, aiEnabled = true) {
     const container = document.getElementById('stockAdvancedRec');
     if (!container) return;
 
@@ -1843,6 +1952,16 @@ function renderAdvancedRecommendation(data) {
     }
 
     container.style.display = 'block';
+
+    // Update Header based on AI status
+    const header = container.querySelector('h4');
+    if (header) {
+        if (aiEnabled) {
+            header.innerHTML = `🤖 Expert AI Analysis <span style="font-size: 11px; padding: 2px 6px; background: var(--bg-secondary); border-radius: 4px; color: var(--text-muted); font-weight: normal;">BETA</span>`;
+        } else {
+            header.innerHTML = `📊 Technical Analysis <span style="font-size: 11px; padding: 2px 6px; background: var(--bg-secondary); border-radius: 4px; color: var(--text-muted); font-weight: normal;">ALGO</span>`;
+        }
+    }
 
     // Header
     const signalBadge = document.getElementById('recSignalBadge');
@@ -1876,7 +1995,10 @@ function renderAdvancedRecommendation(data) {
 
     // Rationale
     const rationale = document.getElementById('recRationale');
-    rationale.textContent = `"${data.expert_rationale}"`;
+    rationale.innerHTML = `
+        <div style="margin-bottom: 12px;">"${data.expert_rationale}"</div>
+        ${data.action_summary ? `<div style="font-weight: 600; color: var(--accent-primary); border-top: 1px solid var(--border-color); padding-top: 8px;">💡 Action: ${data.action_summary}</div>` : ''}
+    `;
 
     // Scenarios (New)
     if (data.scenarios) {
@@ -1888,6 +2010,50 @@ function renderAdvancedRecommendation(data) {
         }
         renderList('recBullList', data.scenarios.bull_case);
         renderList('recBearList', data.scenarios.bear_case);
+    }
+
+    // Risk Metrics (New)
+    if (data.risk_metrics) {
+        const riskContainer = document.getElementById('recRiskMetrics');
+        if (riskContainer) {
+            const createMetric = (label, value, suffix = '', tooltip = '') => `
+                <div style="background: rgba(255,255,255,0.03); padding: 10px; border-radius: 8px;">
+                    <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 4px;">${label}</div>
+                    <div style="font-size: 14px; font-weight: 600; color: var(--text-primary);">${value}${suffix}</div>
+                </div>
+             `;
+
+            riskContainer.innerHTML = `
+                ${createMetric('Volatility (30D)', data.risk_metrics.volatility_30d, '%')}
+                ${createMetric('Beta', data.risk_metrics.beta, 'x')}
+                ${createMetric('Max Drawdown', data.risk_metrics.max_drawdown, '%')}
+                ${createMetric('VaR (95%)', data.risk_metrics.var_95, '%')}
+             `;
+        }
+
+        // Add Risk Level Badge to header if exists
+        // (Not implemented to keep things clean, accessible in tab)
+    }
+
+    // Technical Indicators (NewGrid)
+    if (data.technical_indicators) {
+        const techContainer = document.getElementById('recTechnicalGrid');
+        if (techContainer) {
+            const rsi = data.technical_indicators.rsi || 0;
+            const rsiSignal = data.technical_indicators.rsi_signal || 'NEUTRAL';
+            const rsiColor = rsi < 30 ? '#10b981' : (rsi > 70 ? '#ef4444' : '#fbbf24');
+
+            techContainer.innerHTML = `
+                <div style="background: rgba(255,255,255,0.03); padding: 8px; border-radius: 6px; display: flex; justify-content: space-between; align-items: center;">
+                    <span style="font-size: 12px; color: var(--text-muted);">RSI (14)</span>
+                    <span style="font-size: 13px; font-weight: 600; color: ${rsiColor};">${rsi}</span>
+                </div>
+                 <div style="background: rgba(255,255,255,0.03); padding: 8px; border-radius: 6px; display: flex; justify-content: space-between; align-items: center;">
+                    <span style="font-size: 12px; color: var(--text-muted);">Trend</span>
+                    <span style="font-size: 13px; font-weight: 600; color: var(--text-primary);">${data.technical_indicators.ma_20_signal || '--'} 20DMA</span>
+                </div>
+             `;
+        }
     }
 
     // Factor Ratings (New)
@@ -2640,9 +2806,22 @@ function updateExpertGauge(recommendation) {
     const score = recommendation.score || 50;
     const signal = recommendation.signal || 'HOLD';
 
-    // Update text
-    document.getElementById('gaugeScore').textContent = score;
-    document.getElementById('gaugeSignal').textContent = signal;
+    // Reset tabs
+    document.querySelectorAll('.tab-content').forEach(el => el.style.display = 'none');
+    document.getElementById('tabContentRationale').style.display = 'block';
+
+    // Reset tab buttons
+    document.querySelectorAll('.analysis-tabs .tab-btn').forEach(btn => {
+        btn.classList.remove('active');
+        btn.style.background = 'transparent';
+        btn.style.color = 'var(--text-secondary)';
+    });
+    const firstTab = document.querySelector('.analysis-tabs .tab-btn');
+    if (firstTab) {
+        firstTab.classList.add('active');
+        firstTab.style.background = 'var(--bg-card)';
+        firstTab.style.color = 'var(--text-primary)';
+    }
 
     // Signal color
     const signalEl = document.getElementById('gaugeSignal');
@@ -2793,28 +2972,93 @@ function updateFactorBars(factors) {
     }
 }
 function switchAnalysisTab(tabName) {
-    const buttons = document.querySelectorAll('.tab-btn');
-    buttons.forEach(btn => btn.classList.remove('active'));
-    if (event && event.currentTarget) {
-        event.currentTarget.classList.add('active');
-        buttons.forEach(btn => {
-            if (btn === event.currentTarget) {
-                btn.style.background = 'var(--bg-card)';
-                btn.style.color = 'var(--text-primary)';
-            } else {
-                btn.style.background = 'transparent';
-                btn.style.color = 'var(--text-secondary)';
-            }
-        });
+    // Hide all content
+    document.querySelectorAll('.tab-content').forEach(el => el.style.display = 'none');
+
+    // Show specific content
+    // Map tabName to ID
+    const map = {
+        'rationale': 'tabContentRationale',
+        'bull_case': 'tabContentBull',
+        'bear_case': 'tabContentBear',
+        'risk': 'tabContentRisk'
+    };
+
+    const targetId = map[tabName];
+    if (targetId) {
+        const target = document.getElementById(targetId);
+        if (target) target.style.display = 'block';
     }
-    ['rationale', 'bull', 'bear'].forEach(t => {
-        const id = 'tabContent' + t.charAt(0).toUpperCase() + t.slice(1);
-        const el = document.getElementById(id);
-        if (el) el.style.display = (t === tabName) ? 'block' : 'none';
+
+    // Update buttons
+    const buttons = document.querySelectorAll('.analysis-tabs .tab-btn');
+    buttons.forEach(btn => {
+        // Simple text check or attribute check could work, but using index reliance is risky
+        // Let's assume order matches or text includes key words
+        const text = btn.textContent.toLowerCase();
+        let active = false;
+
+        if (tabName === 'rationale' && text.includes('rationale')) active = true;
+        if (tabName === 'bull_case' && text.includes('bull')) active = true;
+        if (tabName === 'bear_case' && text.includes('bear')) active = true;
+        if (tabName === 'risk' && text.includes('risk')) active = true;
+
+        if (active) {
+            btn.classList.add('active');
+            btn.style.background = 'var(--bg-card)';
+            btn.style.color = 'var(--text-primary)';
+        } else {
+            btn.classList.remove('active');
+            btn.style.background = 'transparent';
+            btn.style.color = 'var(--text-secondary)';
+        }
     });
 }
 
 // ===== Gemini AI Settings =====
+
+async function updateAssistantUI() {
+    try {
+        const data = await apiCall('/api/gemini/config');
+
+        // Update Sidebar
+        const navItem = document.querySelector('.nav-item[data-section="ai"]');
+        if (navItem) {
+            const icon = navItem.querySelector('.material-icons');
+            const text = navItem.querySelector('span:last-child'); // Using last-child for text
+
+            if (data.has_key && data.ai_enabled) {
+                if (icon) icon.textContent = 'smart_toy';
+                if (text) text.textContent = 'AI Assistant';
+                navItem.title = "Chat with Gemini AI";
+
+                // Update Embedded Chat UI
+                const chatHeader = document.querySelector('.ai-chat-compact h4');
+                if (chatHeader) {
+                    chatHeader.innerHTML = '<span class="material-icons" style="color: var(--accent-primary);">smart_toy</span> Ask AI Assistant';
+                }
+                const chatInput = document.getElementById('aiChatInput');
+                if (chatInput) chatInput.placeholder = "e.g., Should I buy RELIANCE today? or Analyze TCS...";
+
+            } else {
+                if (icon) icon.textContent = 'travel_explore';
+                if (text) text.textContent = 'Smart Search';
+                navItem.title = "Google Search Assistant";
+
+                // Update Embedded Chat UI
+                const chatHeader = document.querySelector('.ai-chat-compact h4');
+                if (chatHeader) {
+                    chatHeader.innerHTML = '<span class="material-icons" style="color: var(--accent-primary);">travel_explore</span> Smart Search';
+                }
+                const chatInput = document.getElementById('aiChatInput');
+                if (chatInput) chatInput.placeholder = "Search for market news, stock details, or company analysis...";
+            }
+        }
+    } catch (e) {
+        console.warn('Assistant UI update failed:', e);
+    }
+}
+
 async function loadGeminiConfig() {
     try {
         const data = await apiCall('/api/gemini/config');
@@ -2850,6 +3094,9 @@ async function saveGeminiConfig() {
         });
         statusEl.textContent = '✓ Saved successfully!';
         document.getElementById('geminiApiKey').value = ''; // Clear for security
+
+        // Update UI immediately (Sidebar etc)
+        await updateAssistantUI();
     } catch (e) {
         statusEl.textContent = '❌ Failed to save';
     }
@@ -2865,6 +3112,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (settingsNav) {
         settingsNav.addEventListener('click', loadGeminiConfig);
     }
+
+    // Initialize Assistant Icon on load
+    updateAssistantUI();
 });
 
 // ===== AI Chatbot Logic =====
@@ -2980,7 +3230,7 @@ async function initSystemControls() {
                     ai_features: aiToggle.checked
                 })
             });
-            showToast('System settings updated', 'success');
+            showToast('System settings updated', 'success', 3000);
         } catch (e) {
             console.error("Failed to update system status:", e);
             showToast('Failed to update settings', 'error');
@@ -3000,45 +3250,67 @@ async function initSystemControls() {
 document.addEventListener('DOMContentLoaded', initSystemControls);
 
 // Simple Toast Notification
-function showToast(message, type = 'info') {
+function showToast(message, type = 'info', duration = 4000) {
     const toast = document.createElement('div');
-    toast.className = `toast ${type} `;
-    toast.innerText = message;
+    toast.className = `toast ${type}`;
+    // Flex container for content and close button
+    toast.style.display = 'flex';
+    toast.style.alignItems = 'center';
+    toast.style.justifyContent = 'space-between';
+    toast.style.gap = '12px';
+
+    toast.innerHTML = `
+        <span>${message}</span>
+        <button onclick="this.parentElement.remove()" style="background:none; border:none; color:inherit; font-size:18px; cursor:pointer; padding:0; line-height:1; opacity:0.8;">&times;</button>
+    `;
 
     // Add toast styles dynamically if not present
     if (!document.getElementById('toast-style')) {
-        const style = document.createElement('style');
-        style.id = 'toast-style';
+        const style = document.createElement('div'); // Using div to avoid hydration issues if any, acts as container for style
         style.innerHTML = `
-    .toast {
-    position: fixed;
-    top: 20px;
-    right: 20px;
-    background: #333;
-    color: white;
-    padding: 12px 24px;
-    border - radius: 8px;
-    z - index: 2000;
-    animation: slideInToast 0.3s ease - out;
-    box - shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-}
+        <style id="toast-style">
+            .toast {
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                background: #333;
+                color: white;
+                padding: 12px 20px;
+                border-radius: 8px;
+                z-index: 9999;
+                animation: slideInToast 0.3s ease-out;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+                font-size: 14px;
+                min-width: 250px;
+                max-width: 400px;
+            }
             .toast.success { background: #10B981; }
             .toast.error { background: #EF4444; }
-@keyframes slideInToast {
-                from { transform: translateX(100 %); opacity: 0; }
+            .toast.info { background: #3B82F6; }
+            
+            @keyframes slideInToast {
+                from { transform: translateX(100%); opacity: 0; }
                 to { transform: translateX(0); opacity: 1; }
-}
-`;
-        document.head.appendChild(style);
+            }
+        </style>`;
+        document.head.appendChild(style.firstElementChild);
     }
 
     document.body.appendChild(toast);
-    setTimeout(() => {
-        toast.style.opacity = '0';
-        toast.style.transform = 'translateY(-20px)';
-        toast.style.transition = 'all 0.3s';
-        setTimeout(() => toast.remove(), 300);
-    }, 3000);
+
+    // Auto remove if duration > 0
+    if (duration > 0) {
+        setTimeout(() => {
+            if (document.body.contains(toast)) {
+                toast.style.opacity = '0';
+                toast.style.transform = 'translateY(-20px)';
+                toast.style.transition = 'all 0.3s';
+                setTimeout(() => {
+                    if (document.body.contains(toast)) toast.remove();
+                }, 300);
+            }
+        }, duration);
+    }
 }
 
 // ===== Omnibar Logic (Search + Chat) =====

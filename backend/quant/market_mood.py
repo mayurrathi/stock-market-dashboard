@@ -14,30 +14,44 @@ import numpy as np
 from typing import Dict
 from datetime import datetime, timedelta
 import logging
+import asyncio
 
 logger = logging.getLogger(__name__)
 
 
-def get_india_vix() -> Dict:
+
+
+def clean_float(val) -> float:
+    """Ensure value is a valid float for JSON (no NaN/Inf)"""
+    if val is None:
+        return 0.0
+    try:
+        f_val = float(val)
+        if pd.isna(f_val) or np.isinf(f_val):
+            return 0.0
+        return f_val
+    except:
+        return 0.0
+
+async def get_india_vix() -> Dict:
     """
-    Fetch India VIX (Volatility Index) data.
-    VIX measures market fear/volatility expectations.
-    
-    Interpretation:
-    - VIX < 12: Low volatility, complacency (Greed zone)
-    - VIX 12-18: Normal volatility
-    - VIX 18-25: Elevated volatility (Fear building)
-    - VIX > 25: High volatility, panic (Fear zone)
+    Fetch India VIX (Volatilty Index) data.
     """
     try:
-        # India VIX ticker
-        vix = yf.Ticker("^INDIAVIX")
-        hist = vix.history(period="1mo")
+        # Run blocking yfinance call in thread to avoid blocking event loop
+        import asyncio
+        from functools import partial
         
-        if hist.empty:
-            # Fallback: Try alternate ticker
-            vix = yf.Ticker("INDIAVIX.NS")
+        def fetch_vix():
+            vix = yf.Ticker("^INDIAVIX")
             hist = vix.history(period="1mo")
+            if hist.empty:
+                vix = yf.Ticker("INDIAVIX.NS")
+                hist = vix.history(period="1mo")
+            return hist
+
+        loop = asyncio.get_event_loop()
+        hist = await loop.run_in_executor(None, fetch_vix)
         
         if hist.empty:
             return {
@@ -71,11 +85,11 @@ def get_india_vix() -> Dict:
             zone = "Extreme Fear"
         
         return {
-            "current": round(current_vix, 2),
-            "change": round(change, 2),
-            "change_pct": round(change_pct, 2),
-            "avg_20d": round(vix_20d_avg, 2) if not pd.isna(vix_20d_avg) else current_vix,
-            "percentile": round(vix_percentile, 1),
+            "current": round(clean_float(current_vix), 2),
+            "change": round(clean_float(change), 2),
+            "change_pct": round(clean_float(change_pct), 2),
+            "avg_20d": round(clean_float(vix_20d_avg if not pd.isna(vix_20d_avg) else current_vix), 2),
+            "percentile": round(clean_float(vix_percentile), 1),
             "zone": zone,
             "available": True
         }
@@ -91,20 +105,21 @@ def get_india_vix() -> Dict:
         }
 
 
-def get_nifty_momentum() -> Dict:
+async def get_nifty_momentum() -> Dict:
     """
-    Calculate NIFTY 50 momentum indicators.
-    
-    Uses:
-    - Rate of Change (ROC) - 14-day
-    - Distance from 50/200 DMA
-    - RSI
+    Calculate NIFTY 50 momentum indicators using stock_api (Async/HTTPX).
     """
     try:
-        nifty = yf.Ticker("^NSEI")
-        hist = nifty.history(period="1y")
+        from backend.stock_api import stock_api
         
-        if hist.empty:
+        # Fetch history for NIFTY 50
+        data = await stock_api.get_stock_history("^NSEI", period="1y")
+        
+        if not data or not data.get('close'):
+            # Fallback
+            data = await stock_api.get_stock_history("NIFTYBEES.NS", period="1y")
+            
+        if not data or not data.get('close'):
             return {
                 "roc_14": 0,
                 "above_50dma": False,
@@ -114,11 +129,19 @@ def get_nifty_momentum() -> Dict:
                 "available": False
             }
         
-        close = hist['Close']
+        # Convert to pandas for calculation
+        close = pd.Series(data['close'])
+        
+        if len(close) == 0:
+            raise ValueError("No close price data")
+            
         current_price = close.iloc[-1]
         
         # Rate of Change (14-day)
-        roc_14 = ((current_price / close.iloc[-14]) - 1) * 100 if len(close) >= 14 else 0
+        try:
+            roc_14 = ((current_price / close.iloc[-14]) - 1) * 100 if len(close) >= 14 else 0
+        except:
+            roc_14 = 0
         
         # SMAs
         sma_50 = close.rolling(window=50).mean().iloc[-1] if len(close) >= 50 else current_price
@@ -148,14 +171,14 @@ def get_nifty_momentum() -> Dict:
             trend = "Weak"
         
         return {
-            "current_price": round(current_price, 2),
-            "roc_14": round(roc_14, 2),
-            "sma_50": round(sma_50, 2),
-            "sma_200": round(sma_200, 2),
-            "above_50dma": above_50dma,
-            "above_200dma": above_200dma,
-            "rsi": round(current_rsi, 1),
-            "trend": trend,
+            "current_price": round(clean_float(current_price), 2),
+            "roc_14": round(clean_float(roc_14), 2),
+            "sma_50": round(clean_float(sma_50), 2),
+            "sma_200": round(clean_float(sma_200), 2),
+            "above_50dma": bool(above_50dma),
+            "above_200dma": bool(above_200dma),
+            "rsi": round(clean_float(current_rsi), 1),
+            "trend": (trend),
             "available": True
         }
         
@@ -169,24 +192,14 @@ def get_nifty_momentum() -> Dict:
         }
 
 
-def calculate_fear_greed_index() -> Dict:
+async def calculate_fear_greed_index() -> Dict:
     """
-    Calculate the Fear & Greed Index (0-100).
-    
-    Components:
-    1. VIX Level (40% weight)
-    2. NIFTY Momentum (30% weight)
-    3. Market Breadth approximation (30% weight)
-    
-    Scale:
-    0-20: Extreme Fear
-    20-40: Fear
-    40-60: Neutral
-    60-80: Greed
-    80-100: Extreme Greed
+    Calculate the Fear & Greed Index (Async).
     """
-    vix_data = get_india_vix()
-    momentum_data = get_nifty_momentum()
+    vix_data, momentum_data = await asyncio.gather(
+        get_india_vix(),
+        get_nifty_momentum()
+    )
     
     # VIX Score (inverted - low VIX = greed)
     vix = vix_data.get("current", 15)
@@ -240,8 +253,7 @@ def calculate_fear_greed_index() -> Dict:
     
     momentum_score = max(0, min(100, momentum_score))
     
-    # Market Breadth Score (approximated from NIFTY structure)
-    # In absence of real breadth data, use trend + momentum combination
+    # Market Breadth Score
     breadth_score = 50
     if momentum_data.get("trend") in ["Strong Uptrend", "Uptrend"]:
         breadth_score = 70
@@ -278,7 +290,7 @@ def calculate_fear_greed_index() -> Dict:
         action = "Consider accumulating quality stocks"
     
     return {
-        "score": round(composite, 1),
+        "score": round(clean_float(composite), 1),
         "zone": zone,
         "interpretation": interpretation,
         "action": action,
@@ -305,11 +317,11 @@ def calculate_fear_greed_index() -> Dict:
     }
 
 
-def get_market_mood() -> Dict:
+async def get_market_mood() -> Dict:
     """
     Get complete market mood analysis.
     """
-    fear_greed = calculate_fear_greed_index()
+    fear_greed = await calculate_fear_greed_index()
     
     return {
         "fear_greed_index": fear_greed,

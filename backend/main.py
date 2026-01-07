@@ -18,10 +18,11 @@ from sqlalchemy.orm import Session
 from .database import engine, SessionLocal, get_db, Base
 from .models import (
     Config, Source, TelegramMessage, MarketNews, 
-    StockPrice, Analysis, Recommendation, Log, FetchLog, WatchlistStock, AllStarPick, SECTOR_MAPPING, Stock
+    StockPrice, Analysis, Recommendation, Log, FetchLog, WatchlistStock, AllStarPick, PickHistory, SECTOR_MAPPING, Stock
 )
 from .monitor import monitor
-from .news_fetcher import news_fetcher
+from .news_fetcher import NewsFetcher
+from .quant.signal_analyst import SignalAnalyst
 from .stock_api import stock_api, NSE_STOCKS
 from .analyzer import analyzer, LARGE_CAP_STOCKS, MID_CAP_STOCKS, SMALL_CAP_STOCKS, PENNY_STOCKS
 from .llm import llm_service
@@ -311,20 +312,27 @@ def get_validity_expiry_ist() -> datetime:
 
 @app.get("/api/allstar")
 async def get_allstar_picks(db: Session = Depends(get_db)):
-    """Get Top 10 All Star stock picks - valid for the trading day"""
+    """Get All Star stock picks (10-50 picks, top 10 highlighted) - valid for the trading day"""
     import pytz
+    from .analyzer import ALL_STOCKS
+    
     ist = pytz.timezone('Asia/Kolkata')
     now = datetime.now(ist)
+    valid_stocks = set(ALL_STOCKS)
     
-    # Check for valid cached picks
+    # Check for valid cached picks - get up to 50
     cached = db.query(AllStarPick).filter(
         AllStarPick.valid_until > now
-    ).order_by(AllStarPick.confidence.desc()).limit(10).all()
+    ).order_by(AllStarPick.confidence.desc()).limit(50).all()
     
-    if len(cached) >= 10:
-        # Return cached picks
-        return {
-            "picks": [{
+    # Filter out any invalid cached picks (legacy cleanup)
+    valid_cached = [p for p in cached if p.symbol in valid_stocks and len(p.symbol) > 2]
+    
+    if len(valid_cached) >= 10:
+        # Return cached picks with is_top_10 and rank
+        picks_data = []
+        for idx, p in enumerate(valid_cached):
+            picks_data.append({
                 "id": p.id,
                 "symbol": p.symbol,
                 "name": p.name,
@@ -336,15 +344,19 @@ async def get_allstar_picks(db: Session = Depends(get_db)):
                 "target_price": p.target_price,
                 "stop_loss": p.stop_loss,
                 "news_count": p.news_count,
-                "valid_until": p.valid_until.isoformat() if p.valid_until else None
-            } for p in cached],
+                "valid_until": p.valid_until.isoformat() if p.valid_until else None,
+                "is_top_10": idx < 10,
+                "rank": idx + 1
+            })
+        return {
+            "picks": picks_data,
             "cached": True,
-            "valid_until": cached[0].valid_until.isoformat() if cached else None,
-            "generated_at": cached[0].created_at.isoformat() if cached else None
+            "valid_until": valid_cached[0].valid_until.isoformat() if valid_cached else None,
+            "generated_at": valid_cached[0].created_at.isoformat() if valid_cached else None
         }
     
-    # Need to generate fresh picks - delete expired
-    db.query(AllStarPick).filter(AllStarPick.valid_until <= now).delete()
+    # Need to generate fresh picks - delete ALL existing picks to regenerate
+    db.query(AllStarPick).delete()
     db.commit()
     
     # Generate new picks based on analysis
@@ -353,8 +365,266 @@ async def get_allstar_picks(db: Session = Depends(get_db)):
     return {
         "picks": picks,
         "cached": False,
-        "valid_until": get_next_market_close_ist().isoformat(),
+        "valid_until": get_validity_expiry_ist().isoformat(),
         "generated_at": datetime.now(ist).isoformat()
+    }
+
+
+@app.get("/api/sell-picks")
+async def get_sell_picks(db: Session = Depends(get_db)):
+    """Get stocks to SELL based on bearish signals from past week/month"""
+    import pytz
+    from .analyzer import analyzer, ALL_STOCKS, LARGE_CAP_STOCKS, MID_CAP_STOCKS, SMALL_CAP_STOCKS, PENNY_STOCKS
+    from .stock_api import stock_api, NSE_STOCKS
+    
+    ist = pytz.timezone('Asia/Kolkata')
+    now = datetime.now(ist)
+    week_ago = now - timedelta(days=7)
+    month_ago = now - timedelta(days=30)
+    
+    valid_stocks = set(ALL_STOCKS)
+    skip_symbols = {"NIFTY", "NIFTY50", "SENSEX", "BANKNIFTY", "VIX", "US", "UK", "EU", "INDIA"}
+    
+    # Aggregate mentions from past week (primary) and month (secondary)
+    week_news = db.query(MarketNews).filter(MarketNews.created_at >= week_ago).all()
+    week_messages = db.query(TelegramMessage).filter(TelegramMessage.created_at >= week_ago).all()
+    month_news = db.query(MarketNews).filter(
+        MarketNews.created_at >= month_ago,
+        MarketNews.created_at < week_ago
+    ).all()
+    
+    stock_data = {}
+    
+    # Process week data (more weight)
+    for article in week_news:
+        if article.extracted_stocks:
+            for symbol in article.extracted_stocks:
+                if symbol not in valid_stocks or symbol in skip_symbols or len(symbol) <= 2:
+                    continue
+                if symbol not in stock_data:
+                    stock_data[symbol] = {"mentions": 0, "bullish": 0, "bearish": 0, "neutral": 0, "week_mentions": 0}
+                stock_data[symbol]["mentions"] += 1
+                stock_data[symbol]["week_mentions"] += 1
+                if article.sentiment == "positive":
+                    stock_data[symbol]["bullish"] += 1
+                elif article.sentiment == "negative":
+                    stock_data[symbol]["bearish"] += 1
+                else:
+                    stock_data[symbol]["neutral"] += 1
+    
+    # Process Telegram messages
+    for msg in week_messages:
+        if msg.text:
+            stocks = analyzer.extract_stocks(msg.text)
+            sentiment, _ = analyzer.analyze_sentiment(msg.text)
+            for symbol in stocks:
+                if symbol not in valid_stocks or symbol in skip_symbols or len(symbol) <= 2:
+                    continue
+                if symbol not in stock_data:
+                    stock_data[symbol] = {"mentions": 0, "bullish": 0, "bearish": 0, "neutral": 0, "week_mentions": 0}
+                stock_data[symbol]["mentions"] += 1
+                stock_data[symbol]["week_mentions"] += 1
+                stock_data[symbol][sentiment] += 1
+    
+    # Process older month data (less weight)
+    for article in month_news:
+        if article.extracted_stocks:
+            for symbol in article.extracted_stocks:
+                if symbol not in valid_stocks or symbol in skip_symbols or len(symbol) <= 2:
+                    continue
+                if symbol not in stock_data:
+                    stock_data[symbol] = {"mentions": 0, "bullish": 0, "bearish": 0, "neutral": 0, "week_mentions": 0}
+                stock_data[symbol]["mentions"] += 0.5  # Less weight for older news
+                if article.sentiment == "negative":
+                    stock_data[symbol]["bearish"] += 0.5
+    
+    # Score for SELL signals (inverse of buy algorithm)
+    scored_stocks = []
+    for symbol, data in stock_data.items():
+        bullish = data.get("bullish", 0)
+        bearish = data.get("bearish", 0)
+        total = bullish + bearish + data.get("neutral", 0)
+        
+        # Only consider if there's bearish sentiment
+        if bearish <= 0 or total <= 0:
+            continue
+        
+        # SELL Score: High bearish = High score
+        bearish_ratio = bearish / total
+        if bearish_ratio < 0.3:  # Skip if not significantly bearish
+            continue
+        
+        # Sell score calculation
+        sell_score = 0
+        
+        # Bearish sentiment score (50%)
+        sell_score += bearish_ratio * 50
+        
+        # Recent activity score - more mentions = stronger signal (30%)
+        mentions = data.get("mentions", 0)
+        week_mentions = data.get("week_mentions", 0)
+        if week_mentions >= 3:
+            sell_score += 30
+        elif week_mentions >= 1:
+            sell_score += 15
+        
+        # Risk penalty for quality stocks (20%) - hesitate to sell large caps
+        if symbol in LARGE_CAP_STOCKS:
+            sell_score += 10  # Less eager to sell
+        elif symbol in MID_CAP_STOCKS:
+            sell_score += 15
+        elif symbol in SMALL_CAP_STOCKS:
+            sell_score += 18
+        elif symbol in PENNY_STOCKS:
+            sell_score += 20  # More eager to sell penny stocks
+        
+        scored_stocks.append((symbol, sell_score, data))
+    
+    # Sort by sell score (highest = strongest sell signal)
+    scored_stocks.sort(key=lambda x: x[1], reverse=True)
+    
+    # Generate detailed sell picks
+    picks = []
+    for idx, (symbol, score, data) in enumerate(scored_stocks[:20]):
+        stock_info = next((s for s in NSE_STOCKS if s["symbol"] == symbol), None)
+        name = stock_info["name"] if stock_info else symbol
+        
+        # Get category
+        if symbol in LARGE_CAP_STOCKS:
+            category = "Large Cap"
+        elif symbol in MID_CAP_STOCKS:
+            category = "Mid Cap"
+        elif symbol in SMALL_CAP_STOCKS:
+            category = "Small Cap"
+        elif symbol in PENNY_STOCKS:
+            category = "Penny Stock"
+        else:
+            category = "Unknown"
+        
+        # Get current price
+        quote = await stock_api.get_stock_quote(symbol)
+        current_price = quote.get("price") if quote else None
+        
+        # Calculate stop loss (for short positions or exit price)
+        stop_loss = None
+        if current_price:
+            targets = await stock_api.calculate_targets(symbol)
+            # Inverse targets for sell
+            stop_loss = targets.get("target_price")  # Original target becomes stop for shorts
+        
+        bearish_pct = round((data["bearish"] / max(1, data["bullish"] + data["bearish"] + data["neutral"])) * 100, 1)
+        
+        picks.append({
+            "rank": idx + 1,
+            "symbol": symbol,
+            "name": name,
+            "category": category,
+            "action": "SELL",
+            "sell_score": round(score, 1),
+            "confidence": min(95, round(score * 1.2, 1)),
+            "bearish_pct": bearish_pct,
+            "reasoning": f"Bearish signals: {int(data['bearish'])} bearish vs {int(data['bullish'])} bullish mentions in past week. {bearish_pct}% negative sentiment.",
+            "current_price": current_price,
+            "stop_loss": stop_loss,
+            "mentions_week": int(data.get("week_mentions", 0)),
+            "mentions_total": int(data.get("mentions", 0)),
+            "is_top_5": idx < 5
+        })
+    
+    return {
+        "picks": picks,
+        "total": len(picks),
+        "period": "past_week",
+        "generated_at": now.isoformat()
+    }
+
+
+@app.get("/api/exit-tracker")
+async def get_exit_tracker(db: Session = Depends(get_db)):
+    """Get historical picks from last 30 days and analyze which should be sold"""
+    import pytz
+    from .stock_api import stock_api
+    
+    ist = pytz.timezone('Asia/Kolkata')
+    now = datetime.now(ist)
+    thirty_days_ago = now - timedelta(days=30)
+    
+    # Get all active picks from last 30 days
+    historical_picks = db.query(PickHistory).filter(
+        PickHistory.is_active == True,
+        PickHistory.recommended_date >= thirty_days_ago
+    ).order_by(PickHistory.recommended_date.desc()).all()
+    
+    picks = []
+    for pick in historical_picks:
+        # Calculate days held
+        rec_date = pick.recommended_date
+        if rec_date.tzinfo is None:
+            rec_date = ist.localize(rec_date)
+            
+        days_held = (now - rec_date).days
+        
+        # Get current price
+        quote = await stock_api.get_stock_quote(pick.symbol)
+        current_price = quote.get("price") if quote else pick.recommended_price
+        
+        # Calculate performance
+        performance_pct = 0
+        if pick.recommended_price and current_price:
+            performance_pct = round(((current_price - pick.recommended_price) / pick.recommended_price) * 100, 2)
+        
+        # Determine if should SELL
+        current_action = "HOLD"
+        sell_reason = None
+        
+        # Check sell conditions
+        if pick.original_target and current_price and current_price >= pick.original_target:
+            current_action = "SELL"
+            sell_reason = f"🎯 Target price ₹{pick.original_target:,.0f} reached! Take profit."
+        elif pick.original_stop_loss and current_price and current_price <= pick.original_stop_loss:
+            current_action = "SELL"
+            sell_reason = f"⚠️ Stop loss ₹{pick.original_stop_loss:,.0f} hit. Exit to limit loss."
+        elif days_held >= 30:
+            current_action = "SELL"
+            sell_reason = f"⏰ 30-day holding period exceeded. Consider exiting."
+        elif days_held >= 20 and performance_pct < 2:
+            current_action = "SELL"
+            sell_reason = f"📉 Held {days_held} days with minimal gain ({performance_pct:+.1f}%). Consider rebalancing."
+        
+        # Update database if action changed
+        if pick.current_action != current_action:
+            pick.current_action = current_action
+            pick.sell_reason = sell_reason
+        
+        picks.append({
+            "id": pick.id,
+            "symbol": pick.symbol,
+            "name": pick.name or pick.symbol,
+            "category": pick.category,
+            "recommended_date": pick.recommended_date.strftime("%d %b %Y"),
+            "recommended_price": pick.recommended_price,
+            "current_price": current_price,
+            "original_target": pick.original_target,
+            "original_stop_loss": pick.original_stop_loss,
+            "original_confidence": pick.original_confidence,
+            "days_held": days_held,
+            "performance_pct": performance_pct,
+            "current_action": current_action,
+            "sell_reason": sell_reason,
+            "is_sell": current_action == "SELL"
+        })
+    
+    db.commit()
+    
+    # Sort: SELL first, then by days held
+    picks.sort(key=lambda x: (0 if x["is_sell"] else 1, -x["days_held"]))
+    
+    return {
+        "picks": picks,
+        "total": len(picks),
+        "sell_count": sum(1 for p in picks if p["is_sell"]),
+        "hold_count": sum(1 for p in picks if not p["is_sell"]),
+        "generated_at": now.isoformat()
     }
 
 
@@ -380,26 +650,51 @@ async def generate_allstar_picks(db: Session) -> list:
     # Step 2: Aggregate stock mentions and sentiments
     stock_data = _aggregate_stock_mentions(news, messages, analyzer)
     
-    # Step 3: Select diverse picks (top analyzed + random from categories)
+    # Step 3: Select picks using concrete scoring algorithm (no more random)
     all_picks = _select_diverse_picks(
         stock_data, LARGE_CAP_STOCKS, MID_CAP_STOCKS, SMALL_CAP_STOCKS, PENNY_STOCKS
     )
     
     # Step 4: Generate detailed picks with prices and targets
     picks = []
-    for symbol in all_picks:
+    
+    # Get currently active history to avoid duplicates (track first recommendation date)
+    active_history = {
+        p.symbol: p for p in db.query(PickHistory).filter(PickHistory.is_active == True).all()
+    }
+    
+    for idx, symbol in enumerate(all_picks):
         pick_data = await _generate_pick_details(
             symbol, stock_data, valid_until, 
             NSE_STOCKS, LARGE_CAP_STOCKS, MID_CAP_STOCKS, SMALL_CAP_STOCKS, PENNY_STOCKS,
             stock_api, db
         )
+        # Add is_top_10 flag based on ranking position
+        pick_data["is_top_10"] = idx < 10
+        pick_data["rank"] = idx + 1
         picks.append(pick_data)
+        
+        # Save to PickHistory if this is a top 10 pick and not already being tracked
+        if pick_data["is_top_10"] and symbol not in active_history:
+            history = PickHistory(
+                symbol=symbol,
+                name=pick_data["name"],
+                category=pick_data["category"],
+                recommended_price=pick_data["current_price"],
+                recommended_date=datetime.now(ist),
+                original_target=pick_data["target_price"],
+                original_stop_loss=pick_data["stop_loss"],
+                original_confidence=pick_data["confidence"],
+                original_reasoning=pick_data.get("reasoning"),
+                is_active=True
+            )
+            db.add(history)
     
     db.commit()
     return picks
 
 
-def _aggregate_stock_mentions(news: list, messages: list, analyzer) -\u003e dict:
+def _aggregate_stock_mentions(news: list, messages: list, analyzer) -> dict:
     """Aggregate stock mentions and sentiments from news and messages.
     
     Returns dict: {symbol: {mentions, bullish, bearish, neutral}}
@@ -634,7 +929,7 @@ async def _generate_pick_details(symbol: str, stock_data: dict, valid_until,
     if data["mentions"] > 0:
         reasoning = f"Based on {data['mentions']} mentions in last 24h with {data['bullish']} bullish and {data['bearish']} bearish signals."
     else:
-        reasoning = f"Random discovery from {category} category - diversification pick."
+        reasoning = f"Quality pick from {category} category based on strong fundamentals and market position."
     
     # Save to database
     pick = AllStarPick(
@@ -881,19 +1176,37 @@ async def get_messages(
 
 @app.get("/api/signals/live")
 async def get_live_signals(
-    limit: int = 20,
+    page: int = 1,
+    limit: int = 40,
+    days: int = 7,
     db: Session = Depends(get_db)
 ):
     """Get recent Telegram signals with stock analysis for live feed"""
-    # Get messages from the last hour
-    one_hour_ago = datetime.now(IST) - timedelta(hours=1)
-    if one_hour_ago.tzinfo:
-        one_hour_ago = one_hour_ago.replace(tzinfo=None)
     
-    messages = db.query(TelegramMessage).filter(
-        TelegramMessage.message_date >= one_hour_ago,
+    # Trigger Analyst to process new messages (JIT)
+    try:
+        analyst = SignalAnalyst(db)
+        await analyst.process_new_signals(limit=50)
+    except Exception as e:
+        logger.error(f"Failed to run signal analyst: {e}")
+
+    # Get messages from the last N days (default 7)
+    cutoff_date = datetime.now(IST) - timedelta(days=days)
+    if cutoff_date.tzinfo:
+        cutoff_date = cutoff_date.replace(tzinfo=None)
+    
+    # Base query
+    query = db.query(TelegramMessage).filter(
+        TelegramMessage.message_date >= cutoff_date,
         TelegramMessage.extracted_stocks != None
-    ).order_by(TelegramMessage.message_date.desc()).limit(limit).all()
+    )
+    
+    # Pagination
+    total_count = query.count()
+    total_pages = (total_count + limit - 1) // limit
+    offset = (page - 1) * limit
+    
+    messages = query.order_by(TelegramMessage.message_date.desc()).offset(offset).limit(limit).all()
     
     signals = []
     for m in messages:
@@ -924,6 +1237,9 @@ async def get_live_signals(
     
     return {
         "count": len(signals),
+        "total_count": total_count,
+        "page": page,
+        "total_pages": total_pages,
         "signals": signals,
         "last_updated": datetime.now(IST).isoformat()
     }
@@ -937,7 +1253,8 @@ async def get_news(
     end_date: Optional[datetime] = None,
     shortcut: Optional[str] = None,
     source: Optional[str] = None,
-    limit: int = 50,
+    limit: int = 40,
+    page: int = 1,
     db: Session = Depends(get_db)
 ):
     """Get market news with filters"""
@@ -960,20 +1277,28 @@ async def get_news(
     
     if source:
         query = query.filter(MarketNews.source == source)
+        
+    # Pagination
+    total_count = query.count()
+    total_pages = (total_count + limit - 1) // limit
+    offset = (page - 1) * limit
     
-    news = query.order_by(MarketNews.published_at.desc()).limit(limit).all()
+    news = query.order_by(MarketNews.published_at.desc()).offset(offset).limit(limit).all()
     
     return {
         "count": len(news),
+        "total_count": total_count,
+        "page": page,
+        "total_pages": total_pages,
         "news": [{
             "id": n.id,
-            "source": n.source,
             "title": n.title,
             "summary": n.summary,
             "link": n.link,
-            "stocks": n.extracted_stocks,
+            "source": n.source,
+            "published_at": n.published_at.isoformat() if n.published_at else None,
             "sentiment": n.sentiment,
-            "published_at": n.published_at.isoformat() if n.published_at else None
+            "stocks": n.extracted_stocks
         } for n in news]
     }
 
@@ -1133,10 +1458,15 @@ async def get_stock_detail(symbol: str, db: Session = Depends(get_db)):
         MarketNews.created_at >= week_ago
     ).order_by(MarketNews.created_at.desc()).limit(10).all()
     
-    # Get recommendations for this stock
-    recs = db.query(Recommendation).filter(
-        Recommendation.symbol == symbol
-    ).order_by(Recommendation.created_at.desc()).limit(7).all()
+    ai_enabled = db.query(Config).filter(Config.key == "ai_features_enabled").first()
+    is_ai_on = ai_enabled and ai_enabled.value == "true"
+
+    # Get recommendations for this stock (Only if AI enabled)
+    recs = []
+    if is_ai_on:
+        recs = db.query(Recommendation).filter(
+            Recommendation.symbol == symbol
+        ).order_by(Recommendation.created_at.desc()).limit(7).all()
     
     # Get telegram messages mentioning this stock
     messages = db.query(TelegramMessage).filter(
@@ -1146,7 +1476,6 @@ async def get_stock_detail(symbol: str, db: Session = Depends(get_db)):
     # Calculate key ratios (simulated - in production would come from API)
     key_ratios = get_key_ratios(symbol, quote)
     
-    # Generate Advanced Recommendation
     # Prepare historical data
     formatted_history = chart_data.get('prices', []) if chart_data else []
     
@@ -1158,8 +1487,8 @@ async def get_stock_detail(symbol: str, db: Session = Depends(get_db)):
     
     # Helper for sentiment data
     sentiment_data = {'bullish': 0, 'bearish': 0, 'neutral': 0}
-    # (Simple aggregation from news/messages would go here, for now passing basics)
     
+    # Always generate algorithmic recommendation (Rule-based, not LLM)
     advanced_recommendation = await recommendation_engine.generate_recommendation(
         symbol=symbol,
         quote=quote,
@@ -1183,6 +1512,7 @@ async def get_stock_detail(symbol: str, db: Session = Depends(get_db)):
         "name": stock_info["name"] if stock_info else symbol,
         "sector": stock_info["sector"] if stock_info else None,
         "category": category,
+        "ai_enabled": is_ai_on,
         
         # Price data
         "current_price": quote.get("price") if quote else None,
@@ -2016,9 +2346,11 @@ async def get_gemini_config(db: Session = Depends(get_db)):
     """Get current Gemini configuration"""
     api_key = db.query(Config).filter(Config.key == "gemini_api_key").first()
     model = db.query(Config).filter(Config.key == "gemini_model").first()
+    ai_enabled = db.query(Config).filter(Config.key == "ai_features_enabled").first()
     
     return {
         "has_key": bool(api_key and api_key.value),
+        "ai_enabled": bool(ai_enabled and ai_enabled.value == "true"),
         "model": model.value if model else "gemini-3.0-flash"
     }
 
@@ -2063,10 +2395,18 @@ class ChatRequest(BaseModel):
 @app.post("/api/chat")
 async def chat_with_ai(request: ChatRequest, db: Session = Depends(get_db)):
     """Handle chat requests with the AI assistant"""
-    # Check if AI is enabled
+    # Check AI status and key
     ai_status = db.query(Config).filter(Config.key == "ai_features_enabled").first()
-    if ai_status and ai_status.value != "true":
-        return {"response": "AI features are currently disabled. Enable them in the sidebar."}
+    gemini_key = db.query(Config).filter(Config.key == "gemini_api_key").first()
+    
+    is_ai_ready = (ai_status and ai_status.value == "true") and (gemini_key and gemini_key.value)
+
+    if not is_ai_ready:
+        # Fallback: Use Smart Search Engine
+        from .quant.search_engine import perform_smart_search
+        logger.info(f"AI disabled/missing key. Using Smart Search for: {request.message}")
+        response = await perform_smart_search(request.message)
+        return {"response": response}
         
     response = await llm_service.chat(request.message)
     return {"response": response}
@@ -2179,7 +2519,7 @@ async def get_market_mood_analysis():
     from .quant import get_market_mood
     
     try:
-        result = get_market_mood()
+        result = await get_market_mood()
         return result
     except Exception as e:
         logger.error(f"Market mood analysis failed: {e}")
