@@ -399,17 +399,32 @@ async def generate_allstar_picks(db: Session) -> list:
     return picks
 
 
-def _aggregate_stock_mentions(news: list, messages: list, analyzer) -> dict:
+def _aggregate_stock_mentions(news: list, messages: list, analyzer) -\u003e dict:
     """Aggregate stock mentions and sentiments from news and messages.
     
     Returns dict: {symbol: {mentions, bullish, bearish, neutral}}
+    Only includes VALID Indian stock symbols from ALL_STOCKS list.
     """
+    from .analyzer import ALL_STOCKS
+    
     stock_data = {}
+    valid_stocks = set(ALL_STOCKS)  # O(1) lookup
+    skip_symbols = {"NIFTY", "NIFTY50", "SENSEX", "BANKNIFTY", "VIX", "US", "UK", "EU", "INDIA"}
     
     # Process news articles
     for article in news:
         if article.extracted_stocks:
             for symbol in article.extracted_stocks:
+                # VALIDATION: Only accept known Indian stocks
+                if symbol not in valid_stocks:
+                    continue
+                # Skip indices and common false positives
+                if symbol in skip_symbols:
+                    continue
+                # Skip single/double letter symbols (likely false positives)
+                if len(symbol) <= 2:
+                    continue
+                    
                 if symbol not in stock_data:
                     stock_data[symbol] = {"mentions": 0, "bullish": 0, "bearish": 0, "neutral": 0}
                 stock_data[symbol]["mentions"] += 1
@@ -426,6 +441,14 @@ def _aggregate_stock_mentions(news: list, messages: list, analyzer) -> dict:
             stocks = analyzer.extract_stocks(msg.text)
             sentiment, _ = analyzer.analyze_sentiment(msg.text)
             for symbol in stocks:
+                # VALIDATION: Only accept known Indian stocks
+                if symbol not in valid_stocks:
+                    continue
+                if symbol in skip_symbols:
+                    continue
+                if len(symbol) <= 2:
+                    continue
+                    
                 if symbol not in stock_data:
                     stock_data[symbol] = {"mentions": 0, "bullish": 0, "bearish": 0, "neutral": 0}
                 stock_data[symbol]["mentions"] += 1
@@ -435,33 +458,105 @@ def _aggregate_stock_mentions(news: list, messages: list, analyzer) -> dict:
 
 
 def _select_diverse_picks(stock_data: dict, large_caps: list, mid_caps: list, 
-                          small_caps: list, penny_stocks: list, max_picks: int = 10) -> list:
-    """Select diverse stock picks from analyzed data and random categories.
+                          small_caps: list, penny_stocks: list, max_picks: int = 50) -> list:
+    """Select stock picks using a CONCRETE multi-factor scoring algorithm.
     
-    Returns list of symbols (max 10).
+    No random selection - purely based on:
+    - News Score (30%): Mentions count and recency
+    - Sentiment Score (30%): Bullish vs bearish ratio  
+    - Quality Score (40%): Market cap category bonus
+    
+    Returns list of (symbol, score, is_top_10) tuples.
     """
-    import random
+    from .analyzer import ALL_STOCKS
     
-    # Score and sort stocks (skip indices)
+    valid_stocks = set(ALL_STOCKS)
     scored_stocks = []
+    
+    # Score stocks that have news/mentions
     for symbol, data in stock_data.items():
+        # Skip indices
         if symbol in ["NIFTY", "NIFTY50", "SENSEX", "BANKNIFTY"]:
             continue
-        score = data["mentions"] * 0.5 + data["bullish"] * 1.0 - data["bearish"] * 0.5
-        scored_stocks.append((symbol, score, data))
+        # Validate symbol
+        if symbol not in valid_stocks:
+            continue
+            
+        # === NEWS SCORE (0-100, weight 30%) ===
+        mentions = data.get("mentions", 0)
+        if mentions >= 6:
+            news_score = 100
+        elif mentions >= 3:
+            news_score = 70
+        elif mentions >= 1:
+            news_score = 40
+        else:
+            news_score = 0
+        
+        # === SENTIMENT SCORE (0-100, weight 30%) ===
+        bullish = data.get("bullish", 0)
+        bearish = data.get("bearish", 0)
+        neutral = data.get("neutral", 0)
+        total = bullish + bearish + neutral
+        
+        if total > 0:
+            sentiment_ratio = (bullish - bearish) / total
+            sentiment_score = 50 + (sentiment_ratio * 50)  # Range: 0-100
+            # Bonus for strongly bullish
+            if bullish > bearish * 2 and bullish >= 2:
+                sentiment_score = min(100, sentiment_score + 15)
+        else:
+            sentiment_score = 50  # Neutral
+        
+        # === QUALITY SCORE (0-100, weight 40%) ===
+        if symbol in large_caps:
+            quality_score = 85
+        elif symbol in mid_caps:
+            quality_score = 65
+        elif symbol in small_caps:
+            quality_score = 45
+        elif symbol in penny_stocks:
+            quality_score = 25
+        else:
+            quality_score = 35  # Unknown category
+        
+        # === COMPOSITE SCORE ===
+        total_score = (
+            news_score * 0.30 +
+            sentiment_score * 0.30 +
+            quality_score * 0.40
+        )
+        
+        scored_stocks.append((symbol, total_score, data))
     
+    # Sort by score descending
     scored_stocks.sort(key=lambda x: x[1], reverse=True)
-    top_analyzed = [s for s, _, _ in scored_stocks[:5]]
     
-    # Add random picks from each category for diversity
-    random_large = random.sample(large_caps, min(2, len(large_caps)))
-    random_mid = random.sample(mid_caps, min(2, len(mid_caps)))
-    random_small = random.sample(small_caps, min(1, len(small_caps)))
-    random_penny = random.sample(penny_stocks, min(1, len(penny_stocks)))
+    # If we have fewer than 10 from news, supplement with quality stocks
+    if len(scored_stocks) < 10:
+        existing_symbols = {s[0] for s in scored_stocks}
+        
+        # Add high-quality large caps that aren't already included
+        for symbol in large_caps:
+            if symbol not in existing_symbols and symbol in valid_stocks:
+                scored_stocks.append((symbol, 50.0, {"mentions": 0, "bullish": 0, "bearish": 0, "neutral": 0}))
+                existing_symbols.add(symbol)
+                if len(scored_stocks) >= 15:
+                    break
+        
+        # Add some mid caps
+        for symbol in mid_caps:
+            if symbol not in existing_symbols and symbol in valid_stocks:
+                scored_stocks.append((symbol, 40.0, {"mentions": 0, "bullish": 0, "bearish": 0, "neutral": 0}))
+                existing_symbols.add(symbol)
+                if len(scored_stocks) >= 20:
+                    break
     
-    all_picks = list(set(top_analyzed + random_large + random_mid + random_small + random_penny))
-    random.shuffle(all_picks)
-    return all_picks[:max_picks]
+    # Re-sort after supplementing
+    scored_stocks.sort(key=lambda x: x[1], reverse=True)
+    
+    # Return symbols only, limit to max_picks
+    return [s[0] for s in scored_stocks[:max_picks]]
 
 
 def _determine_action_and_confidence(data: dict) -> tuple:
@@ -1865,6 +1960,31 @@ async def get_research_data(symbol: str, db: Session = Depends(get_db)):
     if stock_quote:
         formatted_stock_info = stock_quote.copy()
         formatted_stock_info["current_price"] = stock_quote.get("price")
+        # Add additional stats if available
+        if "52w_high" not in formatted_stock_info:
+            formatted_stock_info["52w_high"] = stock_quote.get("yearHigh") or stock_quote.get("52w_high")
+        if "52w_low" not in formatted_stock_info:
+            formatted_stock_info["52w_low"] = stock_quote.get("yearLow") or stock_quote.get("52w_low")
+        if "market_cap" not in formatted_stock_info:
+            formatted_stock_info["market_cap"] = stock_quote.get("marketCap") or stock_quote.get("market_cap")
+        if "volume" not in formatted_stock_info:
+            formatted_stock_info["volume"] = stock_quote.get("volume")
+
+    # Get price history for chart (last 30 days)
+    price_history = []
+    try:
+        history = await stock_api.get_stock_history(symbol, period="1mo")
+        if history and history.get('close'):
+            timestamps = history.get('timestamp', [])
+            closes = history.get('close', [])
+            for i, ts in enumerate(timestamps):
+                if i < len(closes) and closes[i] is not None:
+                    price_history.append({
+                        "date": datetime.fromtimestamp(ts).strftime("%Y-%m-%d"),
+                        "close": closes[i]
+                    })
+    except Exception as e:
+        logger.warning(f"Failed to get price history for {symbol}: {e}")
 
     return {
         "symbol": symbol,
@@ -1873,6 +1993,7 @@ async def get_research_data(symbol: str, db: Session = Depends(get_db)):
         "stock_info": formatted_stock_info,  # Return the formatted data
         "fundamentals": fundamentals,
         "expert_recommendation": recommendation,
+        "price_history": price_history,  # For chart rendering
         "recent_news": [{
             "title": n.title,
             "source": n.source,

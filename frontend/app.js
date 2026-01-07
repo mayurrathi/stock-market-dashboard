@@ -79,7 +79,12 @@ function switchSection(section) {
     document.querySelectorAll('.section').forEach(sec => {
         sec.classList.add('hidden');
     });
-    document.getElementById(`${section}-section`).classList.remove('hidden');
+    const sectionEl = document.getElementById(`${section}-section`);
+    if (sectionEl) {
+        sectionEl.classList.remove('hidden');
+    } else {
+        console.warn(`Section not found: ${section}-section`);
+    }
 
     // Update title
     const titles = {
@@ -95,7 +100,10 @@ function switchSection(section) {
         research: 'Research Console',
         screener: 'Stock Screener'
     };
-    document.getElementById('sectionTitle').textContent = titles[section] || section;
+    const sectionTitleEl = document.getElementById('sectionTitle');
+    if (sectionTitleEl) {
+        sectionTitleEl.textContent = titles[section] || section;
+    }
 
     currentSection = section;
 
@@ -582,6 +590,18 @@ function updateIndexCard(cardId, data) {
         change.textContent = `${sign}${data.change_percent.toFixed(2)}%`;
         change.className = `index-change ${data.change_percent >= 0 ? 'positive' : 'negative'}`;
     }
+
+    // Add click handler to open TradingView
+    card.style.cursor = 'pointer';
+    card.onclick = () => {
+        const symbols = {
+            'niftyCard': 'NSE:NIFTY',
+            'sensexCard': 'BSE:SENSEX',
+            'bankniftyCard': 'NSE:BANKNIFTY'
+        };
+        const symbol = symbols[cardId] || 'NSE:NIFTY';
+        window.open(`https://www.tradingview.com/chart/?symbol=${symbol}`, '_blank');
+    };
 }
 
 // ===== All Star Picks =====
@@ -1943,21 +1963,10 @@ function renderExternalLinks(links, symbol) {
         links[item.key] ? `<a href="${links[item.key]}" target="_blank" class="external-link-btn">${item.icon} ${item.label}</a>` : ''
     ).join('');
 
-    // Add Research Console link (internal navigation) - using data attribute for reliable event handling
-    html += `<a href="#" data-research-symbol="${symbol}" class="external-link-btn research-link-btn" style="background: var(--accent-gradient); color: #fff;">🔬 Research</a>`;
+    // Add Research Console link - using window. prefix for reliable global access
+    html += `<a href="javascript:void(0)" onclick="window.openResearchForStock('${symbol}')" class="external-link-btn" style="background: var(--accent-gradient); color: #fff;">🔬 Research</a>`;
 
     container.innerHTML = html;
-
-    // Add click handler for research button
-    const researchBtn = container.querySelector('.research-link-btn');
-    if (researchBtn) {
-        researchBtn.addEventListener('click', function (e) {
-            e.preventDefault();
-            const sym = this.getAttribute('data-research-symbol');
-            console.log('[Research Button] Clicked for symbol:', sym);
-            openResearchForStock(sym);
-        });
-    }
 }
 
 function openResearchForStock(symbol) {
@@ -2585,6 +2594,19 @@ async function loadResearchData(symbol) {
                 setText('statDiv', data.fundamentals.div_yield ? `${data.fundamentals.div_yield}%` : null);
             }
 
+            // Update additional stats (52W High/Low, Market Cap, Volume)
+            if (data.stock_info) {
+                setText('stat52WH', data.stock_info['52w_high'] ? `₹${data.stock_info['52w_high'].toLocaleString()}` : '--');
+                setText('stat52WL', data.stock_info['52w_low'] ? `₹${data.stock_info['52w_low'].toLocaleString()}` : '--');
+                setText('statMCap', data.stock_info.market_cap ? formatMarketCap(data.stock_info.market_cap) : '--');
+                setText('statVolume', data.stock_info.volume ? formatVolume(data.stock_info.volume) : '--');
+            }
+
+            // Render price chart
+            if (data.price_history && data.price_history.length > 0) {
+                renderResearchPriceChart(data.price_history);
+            }
+
             // Update AI Insight
             if (data.expert_recommendation && data.expert_recommendation.rationale) {
                 document.getElementById('aiAnalystInsight').innerHTML = data.expert_recommendation.rationale;
@@ -2640,6 +2662,107 @@ function updateExpertGauge(recommendation) {
 function setText(id, value) {
     const el = document.getElementById(id);
     if (el) el.textContent = value || '--';
+}
+
+function formatMarketCap(value) {
+    if (value >= 1e12) return `₹${(value / 1e12).toFixed(2)}T`;
+    if (value >= 1e9) return `₹${(value / 1e9).toFixed(2)}B`;
+    if (value >= 1e7) return `₹${(value / 1e7).toFixed(2)}Cr`;
+    if (value >= 1e5) return `₹${(value / 1e5).toFixed(2)}L`;
+    return `₹${value.toLocaleString()}`;
+}
+
+function formatVolume(value) {
+    if (value >= 1e7) return `${(value / 1e7).toFixed(2)}Cr`;
+    if (value >= 1e5) return `${(value / 1e5).toFixed(2)}L`;
+    if (value >= 1e3) return `${(value / 1e3).toFixed(1)}K`;
+    return value.toLocaleString();
+}
+
+let researchChartInstance = null;
+
+function renderResearchPriceChart(priceHistory) {
+    const ctx = document.getElementById('researchPriceChart');
+    if (!ctx) return;
+
+    // Destroy existing chart if present
+    if (researchChartInstance) {
+        researchChartInstance.destroy();
+    }
+
+    const labels = priceHistory.map(p => {
+        const d = new Date(p.date);
+        return `${d.getDate()}/${d.getMonth() + 1}`;
+    });
+    const prices = priceHistory.map(p => p.close);
+
+    // Determine trend color
+    const startPrice = prices[0];
+    const endPrice = prices[prices.length - 1];
+    const isUptrend = endPrice >= startPrice;
+    const lineColor = isUptrend ? '#22c55e' : '#ef4444';
+    const bgColor = isUptrend ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)';
+
+    researchChartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Price',
+                data: prices,
+                borderColor: lineColor,
+                backgroundColor: bgColor,
+                borderWidth: 2,
+                fill: true,
+                tension: 0.4,
+                pointRadius: 0,
+                pointHoverRadius: 4
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    mode: 'index',
+                    intersect: false,
+                    backgroundColor: 'rgba(0,0,0,0.8)',
+                    titleColor: '#fff',
+                    bodyColor: '#fff',
+                    callbacks: {
+                        label: (ctx) => `₹${ctx.parsed.y.toLocaleString()}`
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    display: true,
+                    grid: { display: false },
+                    ticks: {
+                        color: 'rgba(255,255,255,0.5)',
+                        font: { size: 10 },
+                        maxRotation: 0,
+                        maxTicksLimit: 6
+                    }
+                },
+                y: {
+                    display: true,
+                    grid: { color: 'rgba(255,255,255,0.05)' },
+                    ticks: {
+                        color: 'rgba(255,255,255,0.5)',
+                        font: { size: 10 },
+                        callback: (v) => `₹${v.toLocaleString()}`
+                    }
+                }
+            },
+            interaction: {
+                mode: 'nearest',
+                axis: 'x',
+                intersect: false
+            }
+        }
+    });
 }
 
 function updateFactorBars(factors) {
