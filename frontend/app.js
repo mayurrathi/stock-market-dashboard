@@ -31,7 +31,9 @@ document.addEventListener('DOMContentLoaded', () => {
     setupUniversalCardClicks(); // Unified click handling for all cards
     setupAutoRefresh();     // Setup 32s Auto-Refresh
     initOmnibar();          // Unified Search/Chat
+    setupGeminiSave();      // Gemini API key configuration
 });
+
 
 // ===== Initialization =====
 
@@ -88,19 +90,332 @@ function switchSection(section) {
         news: 'Market News',
         recommendations: 'Recommendations',
         sources: 'Sources',
-        settings: 'Settings'
+        settings: 'Settings',
+        ai: 'AI Assistant',
+        research: 'Research Console',
+        screener: 'Stock Screener'
     };
     document.getElementById('sectionTitle').textContent = titles[section] || section;
 
     currentSection = section;
 
-    // Load section data
+    // Load section data - ALL tabs should auto-refresh when clicked
+    if (section === 'dashboard') {
+        loadDashboardStats();
+        loadIndices();
+        loadLiveSignals();
+        loadAllStarPicks();
+        loadRecommendations();
+    }
     if (section === 'messages') loadMessages();
     if (section === 'news') loadNews();
     if (section === 'recommendations') loadRecommendationsFull();
     if (section === 'sources') loadSources();
-    if (section === 'overview') loadMarketOverview();
+    if (section === 'overview') {
+        loadMarketOverview();
+        setTimeout(() => triggerMarketAnalysis(), 500); // Slight delay to allow UI to render
+    }
     if (section === 'watchlist') loadWatchlist();
+    if (section === 'allstar') loadAllStarPicksPage();
+    if (section === 'settings') loadSettings();
+    if (section === 'ai') initAiAssistant();
+    if (section === 'research') {
+        // Research section is loaded via openResearchForStock or manually
+        const input = document.getElementById('researchSearchInput');
+        if (input) input.focus();
+    }
+    // Quant Lab tabs
+    if (section === 'patterns') initPatternScout();
+    if (section === 'qvm') initQvmEngine();
+    if (section === 'concall') initConcallAnalyst();
+    if (section === 'mood') loadMarketMood();
+}
+
+// ===== AI Assistant Functions =====
+
+async function initAiAssistant() {
+    // Load the full AI dashboard
+    await loadAiDashboard();
+
+    // Focus the input
+    const input = document.getElementById('aiChatInput');
+    if (input) input.focus();
+}
+
+async function refreshAiDashboard() {
+    showToast('Refreshing AI analysis...', 'info');
+    await loadAiDashboard();
+    showToast('AI Dashboard updated!', 'success');
+}
+
+async function loadAiDashboard() {
+    try {
+        // Fetch all data in parallel
+        const [messagesData, newsData, recsData, allstarData] = await Promise.all([
+            apiCall('/api/messages?shortcut=last_day').catch(() => ({ messages: [], count: 0 })),
+            apiCall('/api/news?shortcut=last_day').catch(() => ({ news: [] })),
+            apiCall('/api/recommendations').catch(() => ({ recommendations: {} })),
+            apiCall('/api/allstar').catch(() => ({ picks: [] }))
+        ]);
+
+        // Count bullish/bearish signals from messages
+        let bullishCount = 0;
+        let bearishCount = 0;
+        const messages = messagesData.messages || [];
+
+        messages.forEach(msg => {
+            const text = (msg.text || '').toLowerCase();
+            const buyWords = ['buy', 'bullish', 'target', 'breakout', 'long', 'accumulate', 'upside'];
+            const sellWords = ['sell', 'bearish', 'short', 'breakdown', 'avoid', 'exit'];
+
+            if (buyWords.some(w => text.includes(w))) bullishCount++;
+            if (sellWords.some(w => text.includes(w))) bearishCount++;
+        });
+
+        // Update stats
+        document.getElementById('aiBullishCount').textContent = bullishCount;
+        document.getElementById('aiBearishCount').textContent = bearishCount;
+        document.getElementById('aiNewsCount').textContent = newsData.news?.length || 0;
+        document.getElementById('aiTelegramCount').textContent = messagesData.count || messages.length;
+
+        // Update Market Mood
+        updateMarketMood(bullishCount, bearishCount);
+
+        // Update Top Picks
+        const topRecs = recsData.recommendations?.next_day?.slice(0, 6) || allstarData.picks?.slice(0, 6) || [];
+        updateAiTopPicks(topRecs);
+
+        // Update Telegram Signals
+        updateTelegramSignals(messages.slice(0, 8));
+
+        // Update Purchase Suggestions (high confidence BUY recommendations)
+        const allRecs = Object.values(recsData.recommendations || {}).flat();
+        const buyRecs = allRecs.filter(r => r.action === 'BUY' && r.confidence > 60).slice(0, 6);
+        updatePurchaseSuggestions(buyRecs);
+
+        // Update News Analysis
+        updateNewsAnalysis(newsData.news?.slice(0, 6) || []);
+
+    } catch (error) {
+        console.error('Failed to load AI dashboard:', error);
+        showToast('Failed to load AI dashboard', 'error');
+    }
+}
+
+function updateMarketMood(bullish, bearish) {
+    const total = bullish + bearish;
+    const moodEmoji = document.getElementById('moodEmoji');
+    const moodLabel = document.getElementById('moodLabel');
+    const moodDescription = document.getElementById('moodDescription');
+    const moodIndicator = document.getElementById('moodIndicator');
+
+    let ratio = total > 0 ? bullish / total : 0.5;
+    let mood, emoji, desc, color;
+
+    if (ratio > 0.7) {
+        mood = 'Very Bullish';
+        emoji = '🚀';
+        desc = 'Strong buying pressure detected. Market sentiment is highly positive.';
+        color = '#22c55e';
+    } else if (ratio > 0.55) {
+        mood = 'Bullish';
+        emoji = '📈';
+        desc = 'More buyers than sellers. Positive sentiment overall.';
+        color = '#22c55e';
+    } else if (ratio > 0.45) {
+        mood = 'Neutral';
+        emoji = '⚖️';
+        desc = 'Mixed signals. Market is in consolidation mode.';
+        color = '#f59e0b';
+    } else if (ratio > 0.3) {
+        mood = 'Bearish';
+        emoji = '📉';
+        desc = 'Selling pressure building. Cautious approach recommended.';
+        color = '#ef4444';
+    } else {
+        mood = 'Very Bearish';
+        emoji = '⚠️';
+        desc = 'Strong selling pressure. Consider defensive positions.';
+        color = '#ef4444';
+    }
+
+    if (moodEmoji) moodEmoji.textContent = emoji;
+    if (moodLabel) {
+        moodLabel.textContent = mood;
+        moodLabel.style.color = color;
+    }
+    if (moodDescription) moodDescription.textContent = desc;
+    if (moodIndicator) moodIndicator.style.left = `${ratio * 100}%`;
+}
+
+function updateAiTopPicks(picks) {
+    const container = document.getElementById('aiTopPicksGrid');
+    if (!container) return;
+
+    if (!picks.length) {
+        container.innerHTML = '<div style="text-align: center; color: var(--text-muted); padding: 40px; grid-column: span 3;">No recommendations available</div>';
+        return;
+    }
+
+    container.innerHTML = picks.map(pick => `
+        <div class="ai-pick-card" onclick="showStockDetail('${pick.symbol}')" style="background: var(--bg-tertiary); padding: 16px; border-radius: 8px; cursor: pointer; border: 1px solid var(--border-color); transition: transform 0.2s;" onmouseover="this.style.transform='scale(1.02)'" onmouseout="this.style.transform='scale(1)'">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <span style="font-weight: 700; font-size: 16px;">${pick.symbol}</span>
+                <span style="background: ${pick.action === 'BUY' ? '#22c55e' : pick.action === 'SELL' ? '#ef4444' : '#f59e0b'}; color: white; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;">${pick.action}</span>
+            </div>
+            <div style="font-size: 12px; color: var(--text-muted);">${pick.category || 'Stock'}</div>
+            <div style="margin-top: 8px;">
+                <div style="display: flex; justify-content: space-between; font-size: 11px; color: var(--text-muted); margin-bottom: 4px;">
+                    <span>Confidence</span>
+                    <span>${Math.round(pick.confidence || 0)}%</span>
+                </div>
+                <div style="height: 4px; background: var(--bg-secondary); border-radius: 2px;">
+                    <div style="height: 100%; width: ${pick.confidence || 0}%; background: ${pick.action === 'BUY' ? '#22c55e' : '#f59e0b'}; border-radius: 2px;"></div>
+                </div>
+            </div>
+        </div>
+    `).join('');
+}
+
+function updateTelegramSignals(messages) {
+    const container = document.getElementById('aiTelegramSignals');
+    if (!container) return;
+
+    if (!messages.length) {
+        container.innerHTML = '<div style="text-align: center; color: var(--text-muted); padding: 40px;">No recent Telegram signals</div>';
+        return;
+    }
+
+    container.innerHTML = messages.map(msg => {
+        const text = (msg.text || '').toLowerCase();
+        const isBullish = ['buy', 'bullish', 'target', 'breakout'].some(w => text.includes(w));
+        const isBearish = ['sell', 'bearish', 'short', 'avoid'].some(w => text.includes(w));
+        const sentiment = isBullish ? 'bullish' : isBearish ? 'bearish' : 'neutral';
+        const color = sentiment === 'bullish' ? '#22c55e' : sentiment === 'bearish' ? '#ef4444' : '#f59e0b';
+
+        return `
+            <div style="padding: 12px; border-bottom: 1px solid var(--border-color); display: flex; gap: 12px; align-items: flex-start;">
+                <span class="material-icons" style="font-size: 18px; color: ${color};">${sentiment === 'bullish' ? 'trending_up' : sentiment === 'bearish' ? 'trending_down' : 'remove'}</span>
+                <div style="flex: 1;">
+                    <div style="font-size: 13px; color: var(--text-primary); line-height: 1.4;">${(msg.text || '').substring(0, 120)}${(msg.text || '').length > 120 ? '...' : ''}</div>
+                    <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">${msg.channel_name || 'Telegram'} • ${new Date(msg.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</div>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function updatePurchaseSuggestions(recs) {
+    const container = document.getElementById('aiPurchaseSuggestions');
+    if (!container) return;
+
+    if (!recs.length) {
+        container.innerHTML = '<div style="text-align: center; color: var(--text-muted); padding: 40px;">No strong buy signals at this time</div>';
+        return;
+    }
+
+    container.innerHTML = recs.map(rec => `
+        <div style="padding: 12px; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center;">
+            <div>
+                <div style="font-weight: 600; color: var(--text-primary);">${rec.symbol}</div>
+                <div style="font-size: 12px; color: var(--text-muted);">${rec.timeframe?.replace('_', ' ') || 'Short term'}</div>
+            </div>
+            <div style="text-align: right;">
+                <div style="background: #22c55e; color: white; padding: 4px 12px; border-radius: 4px; font-size: 12px; font-weight: 600;">BUY</div>
+                <div style="font-size: 11px; color: #22c55e; margin-top: 4px;">${Math.round(rec.confidence)}% confidence</div>
+            </div>
+        </div>
+    `).join('');
+}
+
+function updateNewsAnalysis(news) {
+    const container = document.getElementById('aiNewsAnalysis');
+    if (!container) return;
+
+    if (!news.length) {
+        container.innerHTML = '<div style="text-align: center; color: var(--text-muted); padding: 40px; grid-column: span 2;">No news to analyze</div>';
+        return;
+    }
+
+    container.innerHTML = news.map(article => {
+        const sentiment = article.sentiment || 'neutral';
+        const color = sentiment === 'positive' ? '#22c55e' : sentiment === 'negative' ? '#ef4444' : '#f59e0b';
+        const stocks = article.extracted_stocks?.slice(0, 3).join(', ') || '';
+
+        return `
+            <div style="background: var(--bg-tertiary); padding: 16px; border-radius: 8px; border: 1px solid var(--border-color);">
+                <div style="display: flex; gap: 8px; align-items: flex-start; margin-bottom: 8px;">
+                    <span class="material-icons" style="font-size: 16px; color: ${color};">${sentiment === 'positive' ? 'thumb_up' : sentiment === 'negative' ? 'thumb_down' : 'remove'}</span>
+                    <div style="font-size: 13px; font-weight: 500; line-height: 1.4; color: var(--text-primary);">${(article.title || '').substring(0, 80)}${(article.title || '').length > 80 ? '...' : ''}</div>
+                </div>
+                ${stocks ? `<div style="font-size: 11px; color: var(--accent-primary); margin-bottom: 4px;">📊 Stocks: ${stocks}</div>` : ''}
+                <div style="display: flex; justify-content: space-between; font-size: 11px; color: var(--text-muted);">
+                    <span>${article.source || 'News'}</span>
+                    <span style="color: ${color};">${sentiment.charAt(0).toUpperCase() + sentiment.slice(1)}</span>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function handleAiChip(prompt) {
+    const input = document.getElementById('aiChatInput');
+    if (input) {
+        input.value = prompt;
+        sendAiChat();
+    }
+}
+
+async function sendAiChat() {
+    const input = document.getElementById('aiChatInput');
+    const messagesContainer = document.getElementById('aiChatMessages');
+
+    if (!input || !messagesContainer || !input.value.trim()) return;
+
+    const userMessage = input.value.trim();
+    input.value = '';
+
+    // Add user message
+    messagesContainer.innerHTML += `
+        <div class="ai-message outgoing" style="display: flex; gap: 12px; margin-bottom: 16px; justify-content: flex-end;">
+            <p style="background: var(--accent-primary); color: white; padding: 12px 16px; border-radius: 12px; margin: 0; max-width: 80%;">${userMessage}</p>
+        </div>
+    `;
+
+    // Add loading indicator
+    const loadingId = 'ai-loading-' + Date.now();
+    messagesContainer.innerHTML += `
+        <div id="${loadingId}" class="ai-message incoming" style="display: flex; gap: 12px; margin-bottom: 16px;">
+            <span class="material-icons" style="color: var(--accent-primary);">smart_toy</span>
+            <p style="background: var(--bg-secondary); padding: 12px 16px; border-radius: 12px; margin: 0;">Thinking...</p>
+        </div>
+    `;
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+
+    try {
+        const response = await apiCall('/api/ai/chat', {
+            method: 'POST',
+            body: JSON.stringify({ message: userMessage })
+        });
+
+        // Remove loading and add response
+        document.getElementById(loadingId)?.remove();
+        messagesContainer.innerHTML += `
+            <div class="ai-message incoming" style="display: flex; gap: 12px; margin-bottom: 16px;">
+                <span class="material-icons" style="color: var(--accent-primary);">smart_toy</span>
+                <p style="background: var(--bg-secondary); padding: 12px 16px; border-radius: 12px; margin: 0; max-width: 80%;">${response.reply || 'Sorry, I could not process that request.'}</p>
+            </div>
+        `;
+    } catch (error) {
+        document.getElementById(loadingId)?.remove();
+        messagesContainer.innerHTML += `
+            <div class="ai-message incoming" style="display: flex; gap: 12px; margin-bottom: 16px;">
+                <span class="material-icons" style="color: var(--accent-primary);">smart_toy</span>
+                <p style="background: var(--bg-secondary); padding: 12px 16px; border-radius: 12px; margin: 0; color: #ef4444;">Error: ${error.message || 'Please configure Gemini API key in Settings.'}</p>
+            </div>
+        `;
+    }
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
 }
 
 // ===== Time Shortcuts =====
@@ -164,32 +479,7 @@ function setupAutoRefresh() {
     });
 }
 
-function refreshCurrentSection() {
-    if (currentSection === 'dashboard') {
-        loadDashboardStats();
-        loadRecommendations();
-        loadAllStarPicks();
-        // Also trigger a background analysis for the shortcut for better recommendations
-        if (currentShortcut) {
-            apiCall('/api/analyze', {
-                method: 'POST',
-                body: JSON.stringify({ shortcut: currentShortcut })
-            }).then(() => loadRecommendations());
-        }
-    } else if (currentSection === 'messages') {
-        loadMessages();
-    } else if (currentSection === 'news') {
-        loadNews();
-    } else if (currentSection === 'overview') {
-        loadMarketOverview();
-    } else if (currentSection === 'watchlist') {
-        refreshWatchlistWithPrices();
-    } else if (currentSection === 'recommendations') {
-        loadRecommendationsFull();
-    } else if (currentSection === 'sources') {
-        loadSources();
-    }
-}
+// Note: refreshCurrentSection is defined at line ~802 as an async function with full section support
 
 // ===== Timeframe Tabs =====
 
@@ -361,6 +651,67 @@ async function loadAllStarPicks() {
     }
 }
 
+// Load All Star Picks for the dedicated page (uses different container IDs)
+async function loadAllStarPicksPage() {
+    const container = document.getElementById('allstarPicksPage');
+    const timer = document.getElementById('allstarTimerPage');
+
+    if (!container) return; // Safety check
+
+    try {
+        const data = await apiCall('/api/allstar');
+
+        if (data.picks && data.picks.length > 0) {
+            // Update timer
+            if (data.generated_at || data.valid_until) {
+                const dateStr = data.generated_at || data.valid_until;
+                const dateObj = new Date(dateStr);
+                const timeStr = dateObj.toLocaleString('en-IN', {
+                    hour: '2-digit', minute: '2-digit'
+                });
+                const dayStr = dateObj.toLocaleString('en-IN', {
+                    day: 'numeric', month: 'short'
+                });
+                if (timer) timer.textContent = `Analysis: ${dayStr} • ${timeStr} IST`;
+            }
+
+            container.innerHTML = data.picks.map((pick, index) => `
+                <div class="allstar-card ${pick.action.toLowerCase()}" data-symbol="${pick.symbol}" style="cursor: pointer; position: relative;">
+                    <button onclick="quickAddToWatchlist('${pick.symbol}', event)" title="Add to Watchlist" style="position: absolute; top: 8px; right: 8px; width: 28px; height: 28px; border-radius: 50%; border: none; background: rgba(255,255,255,0.1); color: #fbbf24; cursor: pointer; font-size: 14px;">⭐</button>
+                    <div class="allstar-rank">#${index + 1}</div>
+                    <div class="allstar-main">
+                        <div class="allstar-symbol">${pick.symbol}</div>
+                        <div class="allstar-name">${pick.name}</div>
+                        <div class="allstar-category">${pick.category}</div>
+                    </div>
+                    <div class="allstar-action ${pick.action.toLowerCase()}">
+                        ${pick.action}
+                    </div>
+                    <div class="allstar-details">
+                        <div class="allstar-price">₹${pick.current_price ? pick.current_price.toLocaleString('en-IN') : '--'}</div>
+                        <div class="allstar-targets">
+                            ${pick.target_price ? `<span class="target">T: ₹${pick.target_price.toLocaleString('en-IN')}</span>` : ''}
+                            ${pick.stop_loss ? `<span class="sl">SL: ₹${pick.stop_loss.toLocaleString('en-IN')}</span>` : ''}
+                        </div>
+                    </div>
+                    <div class="allstar-confidence">
+                        <div class="confidence-bar">
+                            <div class="confidence-fill" style="width: ${pick.confidence}%"></div>
+                        </div>
+                        <span>${Math.round(pick.confidence)}%</span>
+                    </div>
+                    ${pick.reasoning ? `<div class="allstar-reasoning">${pick.reasoning}</div>` : ''}
+                </div>
+            `).join('');
+        } else {
+            container.innerHTML = '<div class="empty-state"><span>📊</span><p>No All Star picks available. Click Refresh to generate.</p></div>';
+        }
+    } catch (error) {
+        console.error('Failed to load All Star picks page:', error);
+        container.innerHTML = '<div class="empty-state"><span>⚠️</span><p>Failed to load picks</p></div>';
+    }
+}
+
 async function loadLiveSignals() {
     const container = document.getElementById('liveSignalFeed');
     const countEl = document.getElementById('liveSignalCount');
@@ -438,16 +789,22 @@ async function refreshCurrentSection() {
     }
 
     try {
-        if (activeSection === 'dashboard' || activeSection === 'allstar') {
+        if (activeSection === 'dashboard') {
             await loadAllStarPicks();
             // Also refresh indices
             await loadIndices();
+        } else if (activeSection === 'allstar') {
+            await loadAllStarPicksPage();
         } else if (activeSection === 'news') {
             await loadNews();
         } else if (activeSection === 'messages') {
             await loadLiveSignals();
         } else if (activeSection === 'recommendations') {
-            await loadRecommendations();
+            await loadRecommendationsFull();
+        } else if (activeSection === 'watchlist') {
+            await loadWatchlist();
+        } else if (activeSection === 'sources') {
+            await loadSources();
         }
         showToast('Refreshed!', 'success');
     } catch (e) {
@@ -506,7 +863,7 @@ async function setupGeminiSave() {
     }
 }
 
-document.addEventListener('DOMContentLoaded', setupGeminiSave);
+// NOTE: setupGeminiSave is now called from the main DOMContentLoaded block
 
 function setupUniversalCardClicks() {
     // Single delegated listener for ALL interactive cards and tags across the dashboard
@@ -574,7 +931,7 @@ async function loadRecommendations() {
                         <div class="confidence-bar">
                             <div class="confidence-fill" style="width: ${rec.confidence}%"></div>
                         </div>
-                        <small style="color: var(--text-muted); font-size: 11px;">${rec.confidence.toFixed(1)}% confidence</small>
+                        <small style="color: var(--text-muted); font-size: 11px;">${(rec.confidence || 0).toFixed(1)}% confidence</small>
                     </div>
                     <div class="rec-reasoning">${rec.reasoning || 'No details available'}</div>
                 </div>
@@ -677,6 +1034,8 @@ async function loadRecommendationsFull() {
 
         timeframes.forEach(tf => {
             const container = document.querySelector(`#tf-${tf} .tf-recs`);
+            if (!container) return; // Safety check: skip if container doesn't exist
+
             const recs = data.recommendations[tf] || [];
 
             if (recs.length === 0) {
@@ -685,12 +1044,17 @@ async function loadRecommendationsFull() {
             }
 
             container.innerHTML = recs.slice(0, 5).map(rec => `
-                <div class="rec-card" onclick="showStockDetail('${rec.symbol}')" style="cursor: pointer;">
+                <div class="rec-card" onclick="showRecommendationReasoning('${rec.symbol}', '${tf}', '${rec.action}', ${rec.confidence || 0}, \`${(rec.reasoning || 'No reasoning available').replace(/`/g, "'")}\`)" 
+                     title="${rec.reasoning || 'Click for details'}" 
+                     style="cursor: pointer;">
                     <div class="rec-header">
                         <span class="rec-symbol">${rec.symbol}</span>
                         <span class="rec-action ${rec.action}">${rec.action}</span>
                     </div>
-                    <div style="font-size: 12px; color: var(--text-muted);">${rec.confidence.toFixed(1)}% confidence</div>
+                    <div style="font-size: 12px; color: var(--text-muted);">${(rec.confidence || 0).toFixed(1)}% confidence</div>
+                    <div class="rec-reasoning-preview" style="font-size: 11px; color: var(--text-secondary); margin-top: 4px; line-height: 1.3; max-height: 32px; overflow: hidden;">
+                        ${rec.reasoning ? rec.reasoning.substring(0, 80) + '...' : ''}
+                    </div>
                 </div>
                 `).join('');
         });
@@ -952,6 +1316,96 @@ async function checkTelegramStatus() {
     }
 }
 
+// ===== Settings Page Load =====
+
+async function loadSettings() {
+    // Load and display Telegram credentials (masked for security)
+    try {
+        const telegramStatus = await apiCall('/api/telegram/status');
+
+        if (telegramStatus.authorized) {
+            // Show that Telegram is configured
+            const apiIdInput = document.getElementById('apiId');
+            const apiHashInput = document.getElementById('apiHash');
+            const phoneInput = document.getElementById('phoneNumber');
+
+            if (apiIdInput) apiIdInput.placeholder = '✅ API ID configured';
+            if (apiHashInput) apiHashInput.placeholder = '✅ API Hash configured';
+            if (phoneInput) phoneInput.placeholder = '✅ Phone verified';
+        }
+    } catch (e) {
+        console.error('Failed to load Telegram settings:', e);
+    }
+
+    // Load and display Gemini config
+    try {
+        const geminiConfig = await apiCall('/api/gemini/config');
+
+        if (geminiConfig.has_key) {
+            const geminiInput = document.getElementById('geminiApiKey');
+            if (geminiInput) {
+                geminiInput.placeholder = '✅ API Key configured';
+            }
+
+            // Set model dropdown if available
+            if (geminiConfig.model) {
+                const modelSelect = document.getElementById('geminiModel');
+                if (modelSelect) {
+                    // Try to select the matching option
+                    const options = Array.from(modelSelect.options);
+                    const match = options.find(opt => opt.value === geminiConfig.model);
+                    if (match) {
+                        modelSelect.value = geminiConfig.model;
+                    }
+                }
+            }
+        }
+    } catch (e) {
+        console.error('Failed to load Gemini settings:', e);
+    }
+
+    // Load AI enabled status and setup toggle
+    try {
+        const systemStatus = await apiCall('/api/system/status');
+        const toggle = document.getElementById('aiEnabledToggle');
+        const statusText = document.getElementById('aiStatusText');
+
+        if (toggle) {
+            toggle.checked = systemStatus.ai_features === true;
+            if (statusText) {
+                statusText.textContent = toggle.checked ? 'AI Enabled' : 'AI Disabled';
+                statusText.style.color = toggle.checked ? 'var(--success)' : 'var(--text-muted)';
+            }
+
+            // Add change listener
+            toggle.addEventListener('change', async () => {
+                try {
+                    await apiCall('/api/system/control', {
+                        method: 'POST',
+                        body: JSON.stringify({
+                            system_monitoring: true,  // Keep monitoring enabled
+                            ai_features: toggle.checked
+                        })
+                    });
+
+                    if (statusText) {
+                        statusText.textContent = toggle.checked ? 'AI Enabled' : 'AI Disabled';
+                        statusText.style.color = toggle.checked ? 'var(--success)' : 'var(--text-muted)';
+                    }
+
+                    showToast(toggle.checked ? 'AI Features Enabled' : 'AI Features Disabled', 'success');
+                } catch (e) {
+                    console.error('Failed to toggle AI:', e);
+                    toggle.checked = !toggle.checked;  // Revert on error
+                    showToast('Failed to toggle AI', 'error');
+                }
+            });
+        }
+    } catch (e) {
+        console.error('Failed to load system status:', e);
+    }
+}
+
 // ===== Market Overview =====
 
 async function loadMarketOverview() {
@@ -1131,6 +1585,55 @@ function renderWatchlistCards(container, stocks) {
             `).join('')}
         </div>
     `;
+}
+
+// Show recommendation reasoning in a modal
+function showRecommendationReasoning(symbol, timeframe, action, confidence, reasoning) {
+    const timeframeLabels = {
+        'next_day': 'Next Day',
+        'next_week': 'Next Week',
+        'next_month': 'Next Month',
+        '1yr': '1 Year',
+        '2yr': '2 Years',
+        '5yr': '5 Years',
+        '10yr': '10 Years'
+    };
+
+    const actionColors = {
+        'BUY': '#22c55e',
+        'SELL': '#ef4444',
+        'HOLD': '#f59e0b'
+    };
+
+    const modalHtml = `
+        <div id="reasoningModal" class="modal" style="display: flex;">
+            <div class="modal-content" style="max-width: 500px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                    <h3 style="margin: 0;">${symbol} - ${timeframeLabels[timeframe] || timeframe}</h3>
+                    <button onclick="document.getElementById('reasoningModal').remove()" style="background: none; border: none; font-size: 24px; cursor: pointer; color: var(--text-primary);">×</button>
+                </div>
+                <div style="display: flex; gap: 12px; margin-bottom: 16px;">
+                    <span style="background: ${actionColors[action] || '#666'}; color: white; padding: 4px 12px; border-radius: 4px; font-weight: 600;">${action}</span>
+                    <span style="color: var(--text-muted);">${confidence.toFixed(1)}% confidence</span>
+                </div>
+                <div style="background: var(--bg-tertiary); padding: 16px; border-radius: 8px; border-left: 3px solid ${actionColors[action] || '#666'};">
+                    <h4 style="margin: 0 0 8px 0; color: var(--text-secondary);">📊 Why this recommendation?</h4>
+                    <p style="margin: 0; color: var(--text-primary); line-height: 1.6;">${reasoning}</p>
+                </div>
+                <div style="margin-top: 16px; text-align: right;">
+                    <button class="btn btn-primary" onclick="showStockDetail('${symbol}'); document.getElementById('reasoningModal').remove();">
+                        View Full Analysis
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+
+    // Remove existing modal if present
+    const existing = document.getElementById('reasoningModal');
+    if (existing) existing.remove();
+
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
 }
 
 // Stock chart instance (for cleanup)
@@ -1440,27 +1943,55 @@ function renderExternalLinks(links, symbol) {
         links[item.key] ? `<a href="${links[item.key]}" target="_blank" class="external-link-btn">${item.icon} ${item.label}</a>` : ''
     ).join('');
 
-    // Add Research Console link (internal navigation)
-    html += `<a href="#" onclick="openResearchForStock('${symbol}'); return false;" class="external-link-btn" style="background: var(--accent-gradient); color: #fff;">🔬 Research</a>`;
+    // Add Research Console link (internal navigation) - using data attribute for reliable event handling
+    html += `<a href="#" data-research-symbol="${symbol}" class="external-link-btn research-link-btn" style="background: var(--accent-gradient); color: #fff;">🔬 Research</a>`;
 
     container.innerHTML = html;
+
+    // Add click handler for research button
+    const researchBtn = container.querySelector('.research-link-btn');
+    if (researchBtn) {
+        researchBtn.addEventListener('click', function (e) {
+            e.preventDefault();
+            const sym = this.getAttribute('data-research-symbol');
+            console.log('[Research Button] Clicked for symbol:', sym);
+            openResearchForStock(sym);
+        });
+    }
 }
 
 function openResearchForStock(symbol) {
-    // Close the modal
-    const modal = document.getElementById('stockDetailModal');
-    if (modal) modal.classList.add('hidden');
+    console.log('[Research] Opening research for stock:', symbol);
 
-    // Switch to Research section
-    switchSection('research');
+    try {
+        // Close the modal
+        const modal = document.getElementById('stockDetailModal');
+        if (modal) modal.classList.add('hidden');
 
-    // Populate the research input and trigger search
-    const input = document.getElementById('researchSearchInput');
-    if (input) {
-        input.value = symbol;
-        loadResearchData(symbol);
+        // Switch to Research section
+        switchSection('research');
+
+        // Use setTimeout to ensure DOM is ready after section switch
+        setTimeout(() => {
+            // Populate the research input and trigger search
+            const input = document.getElementById('researchSearchInput');
+            console.log('[Research] Input element found:', !!input, 'Symbol:', symbol);
+            if (input) {
+                input.value = symbol;
+                loadResearchData(symbol);
+            } else {
+                console.error('[Research] Could not find researchSearchInput element');
+                alert('Error: Research input not found');
+            }
+        }, 300);  // Increased delay to ensure DOM is ready
+    } catch (e) {
+        console.error('[Research] Error:', e);
+        alert('Research error: ' + e.message);
     }
 }
+
+// Make globally accessible for onclick handlers
+window.openResearchForStock = openResearchForStock;
 
 
 async function removeFromWatchlist(symbol) {
@@ -1643,23 +2174,32 @@ document.addEventListener('DOMContentLoaded', () => {
     // Analyze market button
     const analyzeBtn = document.getElementById('analyzeMarketBtn');
     if (analyzeBtn) {
-        analyzeBtn.addEventListener('click', async () => {
-            analyzeBtn.disabled = true;
-            analyzeBtn.innerHTML = '<span class="loading"></span> Analyzing...';
-
-            try {
-                const result = await apiCall('/api/market/analyze', { method: 'POST' });
-                alert(result.message);
-                loadMarketOverview();
-            } catch (error) {
-                alert('Analysis failed: ' + error.message);
-            } finally {
-                analyzeBtn.disabled = false;
-                analyzeBtn.innerHTML = '🔍 Analyze Market';
-            }
-        });
+        analyzeBtn.addEventListener('click', () => triggerMarketAnalysis());
     }
 });
+
+async function triggerMarketAnalysis() {
+    const analyzeBtn = document.getElementById('analyzeMarketBtn');
+    if (analyzeBtn) {
+        analyzeBtn.disabled = true;
+        analyzeBtn.innerHTML = '<span class="loading"></span> Analyzing...';
+    }
+
+    try {
+        showToast('Running comprehensive market analysis...', 'info');
+        const result = await apiCall('/api/market/analyze', { method: 'POST' });
+        showToast(result.message || 'Market analysis complete!', 'success');
+        loadMarketOverview();
+    } catch (error) {
+        console.error('Analysis failed:', error);
+        showToast('Analysis failed: ' + error.message, 'error');
+    } finally {
+        if (analyzeBtn) {
+            analyzeBtn.disabled = false;
+            analyzeBtn.innerHTML = '🔍 Analyze Market';
+        }
+    }
+}
 
 // ===== Utilities =====
 
@@ -1807,12 +2347,65 @@ function setupHeroSearch() {
 
 // ===== STOCK SCREENER =====
 
+const SCREEN_GLOSSARY = {
+    // Value Screens
+    'low_pe': 'Stocks with a Price-to-Earnings ratio below 15, indicating they may be undervalued relative to their earnings.',
+    'low_pb': 'Stocks with a Price-to-Book ratio below 1.5, suggesting they are trading below or near their book value.',
+    'low_pe_high_roe': 'Undervalued companies (Low P/E) that are efficiently using capital (High ROE > 15%).',
+    'graham_number': 'Stocks trading below their Graham Number (Sqrt(22.5 * EPS * Book Value)), a classic value investing metric.',
+    'high_dividend_yield': 'Companies paying a dividend yield greater than 2%, suitable for income-focused investors.',
+    'dividend_aristocrats': 'Companies with a strong history of consistent dividend payments and growth.',
+    'peg_undervalued': 'Stocks with a PEG ratio < 1, indicating they are undervalued relative to their growth rate.',
+    'deep_value': 'Stocks trading at significant discounts to their intrinsic value or historical averages.',
+    'ev_ebitda_low': 'Companies with a low Enterprise Value to EBITDA ratio, often a better valuation metric than P/E.',
+    'contrarian_value': 'Out-of-favor stocks with strong fundamentals that may be poised for a turnaround.',
+
+    // Growth Screens
+    'garp': 'Growth At a Reasonable Price (GARP) - stocks showing good growth but not trading at excessive valuations.',
+    'high_roe': 'Companies with Return on Equity > 20%, indicating specific competitive advantages.',
+    'high_roce': 'Companies with High Return on Capital Employed, showing efficient capital allocation.',
+    'profit_growth': 'Companies with consistent profit growth > 20% over the last 3-5 years.',
+    'compounders': 'High-quality businesses that can compound capital at high rates over long periods.',
+    'small_cap_growth': 'High-growth small-cap companies with potential for multi-bagger returns.',
+    'emerging_blue_chips': 'Mid-cap companies on the path to becoming large-cap blue chips.',
+    'earnings_momentum': 'Stocks showing accelerating earnings growth in recent quarters.',
+
+    // Quality Screens
+    'debt_free': 'Companies with zero debt, offering financial stability and lower risk.',
+    'cash_rich': 'Companies holding significant cash reserves on their balance sheet.',
+    'consistent_dividend': 'Companies that have consistently paid dividends without interruption.',
+    'blue_chip': 'Large, established, and financially sound companies with a reputation for quality.',
+    'moat_companies': 'Businesses with a durable competitive advantage (economic moat).',
+    'management_quality': 'Companies known for high-quality, shareholder-friendly management.',
+    'capital_efficient': 'Businesses that generate high returns on minimal capital investment.',
+    'profit_machines': 'Companies with extremely high net profit margins.',
+
+    // Technical Screens
+    'golden_cross': 'Bullish signal where the 50-day MA crosses above the 200-day MA.',
+    'death_cross_avoid': 'Stocks to avoid where the 50-day MA has crossed below the 200-day MA (Bearish).',
+    'rsi_oversold': 'Stocks with RSI < 30, suggesting they are oversold and due for a bounce.',
+    'rsi_overbought': 'Stocks with RSI > 70, suggesting strong momentum (or potential overvaluation).',
+    'breakout_52w_high': 'Stocks breaking out near their 52-week highs, indicating strong uptrend.',
+    'near_52w_low': 'Stocks trading near 52-week lows, potential bottom-fishing candidates.',
+    'high_volume_surge': 'Stocks experiencing unusually high trading volume, indicating strong interest.',
+    'price_momentum': 'Stocks with the strongest price performance over the last 3-6-12 months.',
+
+    // Thematic & Safety
+    'fii_favorites': 'Stocks with high or increasing Foreign Institutional Investor (FII) holding.',
+    'dii_accumulation': 'Stocks being accumulated by Domestic Institutional Investors (DIIs).',
+    'defense_psu': 'Stocks in the Defense and Public Sector Undertaking sectors.',
+    'ev_green_energy': 'Companies involved in Electric Vehicles and Green Energy transition.',
+    'low_beta': 'Low volatility stocks (Beta < 1) that are less risky than the overall market.',
+    'recession_proof': 'Defensive stocks (FMCG, Pharma) that tend to perform well in economic downturns.'
+};
+
 function setupScreener() {
     const runBtn = document.getElementById('runScreenBtn');
     const selectEl = document.getElementById('screenerSelect');
 
     if (!runBtn || !selectEl) return;
 
+    // Run button click
     runBtn.addEventListener('click', () => {
         const screenId = selectEl.value;
         if (screenId) {
@@ -1820,9 +2413,22 @@ function setupScreener() {
         }
     });
 
+    // Dropdown change - Instant Glossary + Run
     selectEl.addEventListener('change', () => {
         const screenId = selectEl.value;
         if (screenId) {
+            // Instant Glossary Update
+            const screenInfoEl = document.getElementById('screenInfo');
+            const description = SCREEN_GLOSSARY[screenId] || 'Custom scanning strategy based on market indicators.';
+            const screenName = selectEl.options[selectEl.selectedIndex].text;
+
+            if (screenInfoEl) {
+                document.getElementById('screenName').textContent = screenName;
+                document.getElementById('screenDescription').textContent = description;
+                document.getElementById('matchCount').textContent = 'Loading matches...';
+                screenInfoEl.classList.remove('hidden');
+            }
+
             runScreen(screenId);
         }
     });
@@ -1913,10 +2519,27 @@ function setupResearchConsole() {
 }
 
 async function loadResearchData(symbol) {
+    console.log('[Research] Loading data for:', symbol);
+
     const consoleEl = document.getElementById('researchConsole');
     const emptyEl = document.getElementById('researchEmpty');
+    const input = document.getElementById('researchSearchInput');
+    const insightEl = document.getElementById('aiAnalystInsight');
+
+    // Reset UI state
+    if (input) input.value = symbol;
+
+    // Show loading state in gauge/insight if element exists
+    if (insightEl) {
+        insightEl.innerHTML = '<span class="loading"></span> Analyzing market data...';
+    }
+
+    // Show console, hide empty state immediately for loading feedback
+    if (consoleEl) consoleEl.classList.remove('hidden');
+    if (emptyEl) emptyEl.classList.add('hidden');
 
     try {
+        console.log('[Research] Fetching from API...');
         const response = await fetch(`${API_BASE}/api/research/${symbol}`);
         const data = await response.json();
 
@@ -1937,90 +2560,86 @@ async function loadResearchData(symbol) {
                 const change = data.stock_info.change_percent || 0;
                 const changeEl = document.getElementById('researchChange');
                 changeEl.textContent = `${change >= 0 ? '+' : ''}${change.toFixed(2)}%`;
-                changeEl.className = `change ${change >= 0 ? 'positive' : 'negative'}`;
+
+                // Color update
+                if (change >= 0) {
+                    changeEl.style.color = '#22c55e'; // Green
+                } else {
+                    changeEl.style.color = '#ef4444'; // Red
+                }
             }
 
             // Update gauge
             if (data.expert_recommendation) {
-                updateRecommendationGauge(data.expert_recommendation);
+                updateExpertGauge(data.expert_recommendation);
+                if (data.expert_recommendation.factors) {
+                    updateFactorBars(data.expert_recommendation.factors);
+                }
             }
 
-            // Update fundamentals
+            // Update fundamentals - using correct HTML element IDs
             if (data.fundamentals) {
-                document.getElementById('metricPE').textContent = data.fundamentals.pe || '--';
-                document.getElementById('metricPB').textContent = data.fundamentals.pb || '--';
-                document.getElementById('metricROE').textContent =
-                    data.fundamentals.roe ? `${data.fundamentals.roe}%` : '--';
-                document.getElementById('metricROCE').textContent =
-                    data.fundamentals.roce ? `${data.fundamentals.roce}%` : '--';
-                document.getElementById('metricDE').textContent =
-                    data.fundamentals.de !== undefined ? data.fundamentals.de.toFixed(2) : '--';
-                document.getElementById('metricDivYield').textContent =
-                    data.fundamentals.div_yield ? `${data.fundamentals.div_yield}%` : '--';
+                setText('statPE', data.fundamentals.pe);
+                setText('statPB', data.fundamentals.pb);
+                setText('statROE', data.fundamentals.roe ? `${data.fundamentals.roe}%` : null);
+                setText('statDiv', data.fundamentals.div_yield ? `${data.fundamentals.div_yield}%` : null);
+            }
+
+            // Update AI Insight
+            if (data.expert_recommendation && data.expert_recommendation.rationale) {
+                document.getElementById('aiAnalystInsight').innerHTML = data.expert_recommendation.rationale;
+            } else {
+                document.getElementById('aiAnalystInsight').textContent = "AI analysis suggests monitoring this stock based on current technical and fundamental indicators.";
             }
 
             // Update news
+            const newsList = document.getElementById('researchNewsList');
             if (data.recent_news && data.recent_news.length > 0) {
-                document.getElementById('researchNewsList').innerHTML = data.recent_news.map(n => `
-                    <div class="research-news-item">
-                        <a href="${n.link}" target="_blank">${n.title}</a>
-                        <span class="news-meta">${n.source} • ${n.sentiment}</span>
+                newsList.innerHTML = data.recent_news.map(n => `
+                    <div class="research-news-item" style="padding: 12px 0; border-bottom: 1px solid var(--border-color);">
+                        <a href="${n.link}" target="_blank" style="display: block; font-weight: 500; margin-bottom: 4px; color: var(--text-primary); text-decoration: none;">${n.title}</a>
+                        <div style="display: flex; justify-content: space-between; font-size: 11px; color: var(--text-muted);">
+                            <span>${n.source}</span>
+                            <span>${n.sentiment || 'Neutral'}</span>
+                        </div>
                     </div>
                 `).join('');
             } else {
-                document.getElementById('researchNewsList').innerHTML = '<p class="text-muted">No recent news</p>';
-            }
-
-            // Update related stocks
-            if (data.related_stocks && data.related_stocks.length > 0) {
-                document.getElementById('relatedStocks').innerHTML = data.related_stocks.map(s =>
-                    `<span class="stock-tag" style="cursor:pointer" onclick="loadResearchData('${s}')">${s}</span>`
-                ).join('');
+                newsList.innerHTML = '<p class="text-muted" style="padding: 12px 0;">No recent news found for this stock.</p>';
             }
         }
     } catch (error) {
-        console.error('Research error:', error);
+        console.error('Error loading research data:', error);
+        showToast('Failed to load research data: ' + error.message, 'error');
     }
 }
 
-function updateRecommendationGauge(recommendation) {
+function updateExpertGauge(recommendation) {
     const score = recommendation.score || 50;
     const signal = recommendation.signal || 'HOLD';
-    const confidence = recommendation.confidence || 50;
-    const factors = recommendation.factors || {};
-    const rationale = recommendation.rationale || 'No analysis available';
 
-    // Update gauge fill
-    const gaugeFill = document.getElementById('gaugeFill');
-    const arcLength = 251; // Total arc length
-    const offset = arcLength - (score / 100 * arcLength);
+    // Update text
+    document.getElementById('gaugeScore').textContent = score;
+    document.getElementById('gaugeSignal').textContent = signal;
 
-    // Determine color class
-    let colorClass = 'hold';
-    if (signal.includes('BUY')) colorClass = 'buy';
-    else if (signal.includes('SELL')) colorClass = 'sell';
+    // Signal color
+    const signalEl = document.getElementById('gaugeSignal');
+    if (signal === 'STRONG BUY' || signal === 'BUY') signalEl.style.color = '#22c55e';
+    else if (signal === 'STRONG SELL' || signal === 'SELL') signalEl.style.color = '#ef4444';
+    else signalEl.style.color = '#f59e0b';
 
-    gaugeFill.className = `gauge-fill ${colorClass}`;
-    gaugeFill.style.strokeDashoffset = offset;
+    // Rotation logic: 0 to 100 maps to -90deg to 90deg
+    // Formula: (score / 100) * 180 - 90
+    const rotation = (score / 100) * 180 - 90;
+    const needle = document.getElementById('gaugeNeedle');
+    if (needle) {
+        needle.style.transform = `rotate(${rotation}deg)`;
+    }
+}
 
-    // Animate gauge
-    document.getElementById('recommendationGauge').classList.add('gauge-animated');
-
-    // Update score and label
-    document.getElementById('gaugeScore').textContent = Math.round(score);
-    const labelEl = document.getElementById('gaugeLabel');
-    labelEl.textContent = signal;
-    labelEl.className = `gauge-label ${colorClass}`;
-
-    // Update confidence
-    document.getElementById('gaugeConfidence').innerHTML =
-        `<span>Confidence:</span> <strong>${Math.round(confidence)}%</strong>`;
-
-    // Update rationale
-    document.getElementById('expertRationale').textContent = rationale;
-
-    // Update factor bars
-    updateFactorBars(factors);
+function setText(id, value) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = value || '--';
 }
 
 function updateFactorBars(factors) {
@@ -2040,7 +2659,12 @@ function updateFactorBars(factors) {
 
         if (barEl && scoreEl) {
             barEl.style.width = `${value}%`;
-            barEl.className = `factor-bar-fill ${value >= 70 ? 'high' : value >= 40 ? 'medium' : 'low'}`;
+            // Color logic
+            let colorClass = 'medium';
+            if (value >= 70) colorClass = 'high';
+            else if (value < 40) colorClass = 'low';
+
+            barEl.className = `factor-bar-fill ${colorClass}`;
             scoreEl.textContent = Math.round(value);
         }
     }
@@ -2136,7 +2760,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const createChatLi = (message, className) => {
         const chatLi = document.createElement("li");
         chatLi.classList.add("chat", className);
-        let chatContent = className === "outgoing" ? `<p></p>` : `<span class="material-icons">smart_toy</span><p></p>`;
+        let chatContent = className === "outgoing" ? `< p ></p > ` : ` < span class="material-icons" > smart_toy</span > <p></p>`;
         chatLi.innerHTML = chatContent;
         chatLi.querySelector("p").innerText = message;
         return chatLi;
@@ -2166,7 +2790,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!userMessage) return;
 
         chatInput.value = "";
-        chatInput.style.height = `${inputInitHeight}px`;
+        chatInput.style.height = `${inputInitHeight} px`;
 
         chatbox.appendChild(createChatLi(userMessage, "outgoing"));
         chatbox.scrollTo(0, chatbox.scrollHeight);
@@ -2191,8 +2815,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     chatInput.addEventListener("input", () => {
-        chatInput.style.height = `${inputInitHeight}px`;
-        chatInput.style.height = `${chatInput.scrollHeight}px`;
+        chatInput.style.height = `${inputInitHeight} px`;
+        chatInput.style.height = `${chatInput.scrollHeight} px`;
     });
 
     chatInput.addEventListener("keydown", (e) => {
@@ -2255,7 +2879,7 @@ document.addEventListener('DOMContentLoaded', initSystemControls);
 // Simple Toast Notification
 function showToast(message, type = 'info') {
     const toast = document.createElement('div');
-    toast.className = `toast ${type}`;
+    toast.className = `toast ${type} `;
     toast.innerText = message;
 
     // Add toast styles dynamically if not present
@@ -2263,25 +2887,25 @@ function showToast(message, type = 'info') {
         const style = document.createElement('style');
         style.id = 'toast-style';
         style.innerHTML = `
-            .toast {
-                position: fixed;
-                top: 20px;
-                right: 20px;
-                background: #333;
-                color: white;
-                padding: 12px 24px;
-                border-radius: 8px;
-                z-index: 2000;
-                animation: slideInToast 0.3s ease-out;
-                box-shadow: 0 4px 12px rgba(0,0,0,0.2);
-            }
+    .toast {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: #333;
+    color: white;
+    padding: 12px 24px;
+    border - radius: 8px;
+    z - index: 2000;
+    animation: slideInToast 0.3s ease - out;
+    box - shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
             .toast.success { background: #10B981; }
             .toast.error { background: #EF4444; }
-            @keyframes slideInToast {
-                from { transform: translateX(100%); opacity: 0; }
+@keyframes slideInToast {
+                from { transform: translateX(100 %); opacity: 0; }
                 to { transform: translateX(0); opacity: 1; }
-            }
-        `;
+}
+`;
         document.head.appendChild(style);
     }
 
@@ -2354,7 +2978,7 @@ function handleOmnibarSubmit(query) {
     if (exactMatch || (isSymbolLike && !query.includes(' '))) {
         // It is likely a stock -> Open Analysis
         const symbol = exactMatch ? exactMatch.symbol : cleanQuery;
-        openStockDetail(symbol);
+        showStockDetail(symbol);
     } else {
         // Treat as Chat Question
         toggleChat(true); // Open chat window
@@ -2370,5 +2994,350 @@ function handleOmnibarSubmit(query) {
                 if (sendBtn) sendBtn.click();
             }, 100);
         }
+    }
+}
+
+// ============== Quant Lab Functions ==============
+
+// Pattern Scout
+function initPatternScout() {
+    const btn = document.getElementById('patternScoutBtn');
+    const input = document.getElementById('patternScoutInput');
+
+    if (btn && !btn.hasListener) {
+        btn.hasListener = true;
+        btn.addEventListener('click', () => analyzePatterns(input.value));
+    }
+    if (input && !input.hasListener) {
+        input.hasListener = true;
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') analyzePatterns(input.value);
+        });
+        input.focus();
+    }
+}
+
+async function analyzePatterns(symbol) {
+    if (!symbol) return showToast('Enter a stock symbol', 'error');
+
+    const container = document.getElementById('patternScoutResults');
+    container.innerHTML = '<div class="empty-state"><span class="loading"></span><p>Analyzing patterns for ' + symbol.toUpperCase() + '...</p></div>';
+
+    try {
+        const data = await apiCall(`/api/quant/patterns/${symbol.toUpperCase()}`);
+
+        if (data.error) {
+            container.innerHTML = `<div class="empty-state"><span style="font-size:48px">⚠️</span><p>${data.error}</p></div>`;
+            return;
+        }
+
+        // Render results
+        let html = `
+        <div class="quant-results">
+            <div class="quant-header">
+                <h2>${data.symbol}</h2>
+                <span class="signal-badge ${data.overall_signal.toLowerCase()}">${data.overall_signal}</span>
+            </div>
+            
+            <div class="quant-grid">
+                <!-- Relative Strength -->
+                <div class="settings-card">
+                    <h4>📊 Relative Strength (vs NIFTY)</h4>
+                    <div class="metric-large">${data.relative_strength?.rs_value || 'N/A'}</div>
+                    <p class="metric-label">${data.relative_strength?.rs_rating || ''}</p>
+                    <small>${data.relative_strength?.interpretation || ''}</small>
+                </div>
+                
+                <!-- Momentum -->
+                <div class="settings-card">
+                    <h4>📈 Momentum Indicators</h4>
+                    <div class="metric-row">
+                        <span>RSI (14):</span>
+                        <strong class="${data.momentum?.rsi > 70 ? 'text-red' : (data.momentum?.rsi < 30 ? 'text-green' : '')}">${data.momentum?.rsi || 'N/A'} (${data.momentum?.rsi_zone || ''})</strong>
+                    </div>
+                    <div class="metric-row">
+                        <span>MACD Trend:</span>
+                        <strong class="${data.momentum?.macd_trend === 'Bullish' ? 'text-green' : 'text-red'}">${data.momentum?.macd_trend || 'N/A'}</strong>
+                    </div>
+                    <small>${data.momentum?.interpretation || ''}</small>
+                </div>
+            </div>
+            
+            <!-- Detected Patterns -->
+            <div class="settings-card" style="margin-top: 16px;">
+                <h4>🔍 Detected Patterns (${data.patterns?.length || 0})</h4>
+                ${data.patterns?.length ? data.patterns.map(p => `
+                    <div class="pattern-item ${p.type}">
+                        <div class="pattern-header">
+                            <span class="pattern-name">${p.pattern}</span>
+                            <span class="badge ${p.type}">${p.reliability}</span>
+                        </div>
+                        <p class="pattern-desc">${p.description}</p>
+                        <p class="pattern-action"><strong>Action:</strong> ${p.action}</p>
+                    </div>
+                `).join('') : '<p style="color: var(--text-muted);">No patterns detected in recent data</p>'}
+            </div>
+            
+            <p class="summary-text">${data.summary || ''}</p>
+        </div>`;
+
+        container.innerHTML = html;
+
+    } catch (e) {
+        container.innerHTML = `<div class="empty-state"><span style="font-size:48px">❌</span><p>Error: ${e.message}</p></div>`;
+    }
+}
+
+// QVM Engine
+function initQvmEngine() {
+    const btn = document.getElementById('qvmAnalyzeBtn');
+    const input = document.getElementById('qvmInput');
+
+    if (btn && !btn.hasListener) {
+        btn.hasListener = true;
+        btn.addEventListener('click', () => analyzeQvm(input.value));
+    }
+    if (input && !input.hasListener) {
+        input.hasListener = true;
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') analyzeQvm(input.value);
+        });
+        input.focus();
+    }
+}
+
+async function analyzeQvm(symbol) {
+    if (!symbol) return showToast('Enter a stock symbol', 'error');
+
+    const container = document.getElementById('qvmResults');
+    container.innerHTML = '<div class="empty-state"><span class="loading"></span><p>Calculating QVM scores for ' + symbol.toUpperCase() + '...</p></div>';
+
+    try {
+        const data = await apiCall(`/api/quant/qvm/${symbol.toUpperCase()}`);
+
+        if (data.error) {
+            container.innerHTML = `<div class="empty-state"><span style="font-size:48px">⚠️</span><p>${data.error}</p></div>`;
+            return;
+        }
+
+        const inv = data.investability || {};
+
+        let html = `
+        <div class="quant-results">
+            <div class="quant-header">
+                <h2>${data.symbol} - ${data.name}</h2>
+                <span class="signal-badge ${inv.recommendation?.toLowerCase().replace(' ', '-')}">${inv.recommendation || 'N/A'}</span>
+            </div>
+            <p style="color: var(--text-muted); margin-bottom: 20px;">${data.sector} | ${data.industry}</p>
+            
+            <!-- Investability Score -->
+            <div class="investability-score">
+                <div class="score-circle" style="--score: ${inv.score || 0}">
+                    <span class="score-value">${inv.score || 0}</span>
+                    <span class="score-label">/ 100</span>
+                </div>
+                <div class="score-info">
+                    <h3>Investability Score</h3>
+                    <p>${inv.rating || ''}</p>
+                </div>
+            </div>
+            
+            <div class="quant-grid" style="margin-top: 24px;">
+                <!-- Quality Score -->
+                <div class="settings-card">
+                    <h4>✨ Quality Score</h4>
+                    <div class="score-bar">
+                        <div class="score-fill" style="width: ${(data.quality?.score / 10) * 100}%; background: var(--accent);"></div>
+                    </div>
+                    <div class="score-label">${data.quality?.score || 0} / 10 (${data.quality?.rating || 'N/A'})</div>
+                    <ul class="breakdown-list">
+                        ${data.quality?.breakdown?.map(b => `<li>${b}</li>`).join('') || ''}
+                    </ul>
+                </div>
+                
+                <!-- Valuation Score -->
+                <div class="settings-card">
+                    <h4>💰 Valuation Score</h4>
+                    <div class="score-bar">
+                        <div class="score-fill" style="width: ${(data.valuation?.score / 10) * 100}%; background: var(--success);"></div>
+                    </div>
+                    <div class="score-label">${data.valuation?.score || 0} / 10 (${data.valuation?.rating || 'N/A'})</div>
+                    <ul class="breakdown-list">
+                        ${data.valuation?.breakdown?.map(b => `<li>${b}</li>`).join('') || ''}
+                    </ul>
+                </div>
+                
+                <!-- Momentum Score -->
+                <div class="settings-card">
+                    <h4>🚀 Momentum Score</h4>
+                    <div class="score-bar">
+                        <div class="score-fill" style="width: ${(data.momentum?.score / 10) * 100}%; background: var(--warning);"></div>
+                    </div>
+                    <div class="score-label">${data.momentum?.score || 0} / 10 (${data.momentum?.rating || 'N/A'})</div>
+                    <ul class="breakdown-list">
+                        ${data.momentum?.breakdown?.map(b => `<li>${b}</li>`).join('') || ''}
+                    </ul>
+                </div>
+            </div>
+            
+            <p class="summary-text">${data.summary || ''}</p>
+        </div>`;
+
+        container.innerHTML = html;
+
+    } catch (e) {
+        container.innerHTML = `<div class="empty-state"><span style="font-size:48px">❌</span><p>Error: ${e.message}</p></div>`;
+    }
+}
+
+// Con-Call Analyst
+function initConcallAnalyst() {
+    const btn = document.getElementById('concallAnalyzeBtn');
+
+    if (btn && !btn.hasListener) {
+        btn.hasListener = true;
+        btn.addEventListener('click', analyzeConcall);
+    }
+}
+
+async function analyzeConcall() {
+    const fileInput = document.getElementById('concallFileInput');
+    const statusEl = document.getElementById('concallStatus');
+    const resultsEl = document.getElementById('concallResults');
+
+    if (!fileInput.files.length) {
+        showToast('Please select a PDF file', 'error');
+        return;
+    }
+
+    const file = fileInput.files[0];
+    statusEl.textContent = '⏳ Uploading and analyzing... This may take 30-60 seconds.';
+    resultsEl.innerHTML = '';
+
+    try {
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const response = await fetch(`${API_BASE}/api/quant/analyze-pdf`, {
+            method: 'POST',
+            body: formData
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            statusEl.textContent = '❌ Error: ' + (data.detail || 'Analysis failed');
+            return;
+        }
+
+        statusEl.textContent = '✅ Analysis complete!';
+
+        // Render analysis results
+        const analysis = data.analysis || {};
+        let html = `
+        <div class="concall-results">
+            <div class="settings-card">
+                <h4>📊 Earnings Call Analysis</h4>
+                <p style="color: var(--text-muted);">Analyzed ${data.text_length?.toLocaleString() || '?'} characters</p>
+            </div>
+            
+            <div class="settings-card">
+                <h4>🚀 Growth Drivers</h4>
+                <ul>${(analysis.growth_drivers || analysis['Growth Drivers'] || []).map(d => `<li>${d}</li>`).join('') || '<li>No data extracted</li>'}</ul>
+            </div>
+            
+            <div class="settings-card">
+                <h4>⚠️ Headwinds & Risks</h4>
+                <ul>${(analysis.headwinds || analysis['Headwinds & Risks'] || []).map(d => `<li>${d}</li>`).join('') || '<li>No data extracted</li>'}</ul>
+            </div>
+            
+            <div class="settings-card">
+                <h4>🔍 Management Integrity Check</h4>
+                <ul>${(analysis.management_integrity || analysis['Management Integrity Check'] || []).map(d => `<li>${d}</li>`).join('') || '<li>No data extracted</li>'}</ul>
+            </div>
+            
+            ${analysis.analyst_summary || analysis['Analyst Summary'] ? `
+            <div class="settings-card">
+                <h4>📝 Analyst Summary</h4>
+                <p>${analysis.analyst_summary || analysis['Analyst Summary']}</p>
+            </div>` : ''}
+        </div>`;
+
+        resultsEl.innerHTML = html;
+
+    } catch (e) {
+        statusEl.textContent = '❌ Error: ' + e.message;
+    }
+}
+
+// Market Mood
+async function loadMarketMood() {
+    const container = document.getElementById('marketMoodContent');
+    container.innerHTML = '<div class="empty-state"><span class="loading"></span><p>Loading market mood...</p></div>';
+
+    try {
+        const data = await apiCall('/api/quant/market-mood');
+
+        const fg = data.fear_greed_index || {};
+        const score = fg.score || 50;
+        const zone = fg.zone || 'Neutral';
+
+        // Color based on zone
+        let zoneColor = 'var(--text-muted)';
+        if (zone.includes('Greed')) zoneColor = '#22c55e';
+        if (zone.includes('Fear')) zoneColor = '#ef4444';
+
+        let html = `
+        <div class="market-mood-container">
+            <div class="mood-gauge">
+                <div class="gauge-bg">
+                    <div class="gauge-fill" style="--score: ${score}; background: linear-gradient(90deg, #ef4444, #f59e0b, #22c55e);"></div>
+                    <div class="gauge-needle" style="left: ${score}%;"></div>
+                </div>
+                <div class="gauge-labels">
+                    <span>Extreme Fear</span>
+                    <span>Neutral</span>
+                    <span>Extreme Greed</span>
+                </div>
+            </div>
+            
+            <div class="mood-score">
+                <div class="score-big" style="color: ${zoneColor}">${score}</div>
+                <div class="score-zone" style="color: ${zoneColor}">${zone}</div>
+            </div>
+            
+            <div class="mood-interpretation">
+                <p>${fg.interpretation || ''}</p>
+                <p class="action"><strong>Action:</strong> ${fg.action || ''}</p>
+            </div>
+            
+            <div class="quant-grid" style="margin-top: 24px;">
+                <div class="settings-card">
+                    <h4>📊 India VIX</h4>
+                    <div class="metric-large">${fg.components?.vix?.value || data.vix_data?.current || 'N/A'}</div>
+                    <p>Score: ${fg.components?.vix?.score || 0}/100 (Weight: 40%)</p>
+                </div>
+                
+                <div class="settings-card">
+                    <h4>📈 NIFTY Momentum</h4>
+                    <div class="metric-large">${fg.components?.momentum?.roc_14 ? fg.components.momentum.roc_14 + '%' : 'N/A'}</div>
+                    <p>RSI: ${fg.components?.momentum?.rsi || 'N/A'}</p>
+                    <p>Score: ${fg.components?.momentum?.score || 0}/100 (Weight: 30%)</p>
+                </div>
+                
+                <div class="settings-card">
+                    <h4>🎯 Market Breadth</h4>
+                    <div class="metric-large">${fg.components?.breadth?.trend || 'N/A'}</div>
+                    <p>Score: ${fg.components?.breadth?.score || 0}/100 (Weight: 30%)</p>
+                </div>
+            </div>
+            
+            <p class="summary-text" style="margin-top: 16px; color: var(--text-muted);">Last updated: ${new Date().toLocaleTimeString('en-IN')}</p>
+        </div>`;
+
+        container.innerHTML = html;
+
+    } catch (e) {
+        container.innerHTML = `<div class="empty-state"><span style="font-size:48px">❌</span><p>Error: ${e.message}</p></div>`;
     }
 }

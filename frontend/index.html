@@ -48,9 +48,43 @@
                     <span class="nav-icon">🎯</span>
                     Recommendations
                 </a>
+                <div class="nav-item" data-section="research">
+                    <span class="material-icons nav-icon-material">science</span>
+                    <span>Research Console</span>
+                </div>
                 <div class="nav-item" data-section="allstar">
                     <span class="material-icons nav-icon-material">star</span>
                     <span>All Star Picks</span>
+                </div>
+                <div class="nav-item" data-section="screener">
+                    <span class="material-icons nav-icon-material">filter_alt</span>
+                    <span>Stock Screener</span>
+                </div>
+
+                <!-- Quant Lab Section -->
+                <div class="nav-section-divider"
+                    style="margin-top: 16px; padding: 8px 16px; font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px;">
+                    Quant Lab</div>
+                <div class="nav-item" data-section="patterns">
+                    <span class="material-icons nav-icon-material">candlestick_chart</span>
+                    <span>Pattern Scout</span>
+                </div>
+                <div class="nav-item" data-section="qvm">
+                    <span class="material-icons nav-icon-material">radar</span>
+                    <span>QVM Engine</span>
+                </div>
+                <div class="nav-item" data-section="concall">
+                    <span class="material-icons nav-icon-material">description</span>
+                    <span>Con-Call Analyst</span>
+                </div>
+                <div class="nav-item" data-section="mood">
+                    <span class="material-icons nav-icon-material">mood</span>
+                    <span>Market Mood</span>
+                </div>
+
+                <div class="nav-item" data-section="ai">
+                    <span class="material-icons nav-icon-material">smart_toy</span>
+                    <span>AI Assistant</span>
                 </div>
                 <div class="nav-item" data-section="settings">
                     <span class="material-icons nav-icon-material">settings</span>
@@ -428,6 +462,29 @@
                 </div>
             </section>
 
+            <!-- All Star Picks Section (Dedicated Page) -->
+            <section class="section hidden" id="allstar-section">
+                <div class="section-header">
+                    <div class="header-main-group">
+                        <h3>⭐ All Star Picks - Today's Top 10</h3>
+                        <button class="btn btn-icon-round refresh-btn" onclick="refreshCurrentSection()">🔄</button>
+                    </div>
+                    <div id="allstarTimerPage" class="refresh-timer">Loading...</div>
+                </div>
+                <div class="disclaimer" style="margin-bottom: 16px;">
+                    ⚠️ <strong>Disclaimer:</strong> These picks are AI-generated based on news and Telegram signal
+                    analysis.
+                    This is NOT financial advice. Always do your own research.
+                </div>
+                <div class="allstar-container">
+                    <div class="allstar-picks" id="allstarPicksPage">
+                        <div class="empty-state"><span class="loading"></span>
+                            <p>Loading All Star picks...</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
             <!-- Stock Screener Section -->
             <section class="section hidden" id="screener-section">
                 <div class="section-header">
@@ -527,169 +584,144 @@
                 <div class="section-header">
                     <div class="header-main-group">
                         <h3>🔬 Research Console</h3>
+                        <p style="color: var(--text-muted); margin: 4px 0 0 0; font-size: 13px;">Deep dive analysis and
+                            expert insights</p>
                     </div>
                     <div class="research-search">
                         <input type="text" class="research-search-input" id="researchSearchInput"
-                            placeholder="Enter stock symbol (e.g., RELIANCE)">
+                            placeholder="Enter stock symbol (e.g., RELIANCE)"
+                            style="padding: 10px 16px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-secondary); color: var(--text-primary); min-width: 300px;">
                         <button class="btn btn-primary" id="researchBtn">Analyze</button>
                     </div>
                 </div>
 
                 <div class="research-console hidden" id="researchConsole">
-                    <!-- Left: Main Analysis -->
-                    <div class="research-main">
-                        <!-- Stock Header -->
-                        <div class="research-card research-header-card">
-                            <div class="research-stock-header">
-                                <div>
-                                    <h2 id="researchSymbol">RELIANCE</h2>
-                                    <p id="researchName">Reliance Industries Ltd</p>
-                                    <span class="sector-badge" id="researchSector">Energy</span>
+                    <!-- Top Row: Identification & Price -->
+                    <div
+                        style="background: var(--bg-secondary); border-radius: 12px; padding: 24px; border: 1px solid var(--border-color); margin-bottom: 24px;">
+                        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                            <div>
+                                <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px;">
+                                    <h2 id="researchSymbol"
+                                        style="margin: 0; font-size: 32px; font-weight: 800; letter-spacing: -0.5px;">
+                                        RELIANCE</h2>
+                                    <span class="sector-badge" id="researchSector"
+                                        style="background: var(--bg-tertiary); padding: 4px 12px; border-radius: 6px; border: 1px solid var(--border-color); font-size: 12px; font-weight: 500;">Energy</span>
                                 </div>
-                                <div class="research-price">
-                                    <span class="price" id="researchPrice">₹0</span>
-                                    <span class="change" id="researchChange">0%</span>
-                                </div>
+                                <div id="researchName" style="color: var(--text-muted); font-size: 16px;">Reliance
+                                    Industries Ltd</div>
                             </div>
-                        </div>
-
-                        <!-- Recommendation Gauge -->
-                        <div class="research-card">
-                            <h4>📊 Expert Recommendation</h4>
-                            <div class="gauge-container" id="recommendationGauge">
-                                <svg class="gauge-svg" viewBox="0 0 200 120">
-                                    <path class="gauge-bg" d="M 20 100 A 80 80 0 0 1 180 100" />
-                                    <path class="gauge-fill hold" id="gaugeFill" d="M 20 100 A 80 80 0 0 1 180 100"
-                                        stroke-dasharray="251" stroke-dashoffset="251" />
-                                </svg>
-                                <div class="gauge-value">
-                                    <span class="gauge-score" id="gaugeScore">--</span>
-                                    <span class="gauge-label hold" id="gaugeLabel">ANALYZING</span>
-                                </div>
-                            </div>
-                            <div class="gauge-confidence" id="gaugeConfidence">
-                                <span>Confidence:</span> <strong>--</strong>
-                            </div>
-                        </div>
-
-                        <!-- Expert Rationale -->
-                        <div class="research-card">
-                            <div class="expert-rationale">
-                                <div class="expert-rationale-title">
-                                    🧠 Expert Analysis
-                                </div>
-                                <p class="expert-rationale-text" id="expertRationale">
-                                    Enter a stock symbol above to get expert analysis...
-                                </p>
-                            </div>
-                        </div>
-
-                        <!-- Recent News -->
-                        <div class="research-card">
-                            <h4>📰 Recent News</h4>
-                            <div class="research-news-list" id="researchNewsList">
-                                <p class="text-muted">No recent news</p>
+                            <div style="text-align: right;">
+                                <div id="researchPrice" style="font-size: 32px; font-weight: 700;">₹2,456.00</div>
+                                <div id="researchChange" style="font-size: 16px; font-weight: 600; color: #22c55e;">
+                                    +1.25%</div>
                             </div>
                         </div>
                     </div>
 
-                    <!-- Right: Factor Scores & Metrics -->
-                    <div class="research-sidebar">
-                        <!-- Factor Scores -->
-                        <div class="research-card">
-                            <h4>📈 Factor Analysis</h4>
-                            <div class="factor-scores" id="factorScores">
-                                <div class="factor-row">
-                                    <span class="factor-name">Value</span>
-                                    <div class="factor-bar-bg">
-                                        <div class="factor-bar-fill medium" id="factorValue" style="width: 50%"></div>
-                                    </div>
-                                    <span class="factor-value" id="factorValueScore">50</span>
-                                </div>
-                                <div class="factor-row">
-                                    <span class="factor-name">Growth</span>
-                                    <div class="factor-bar-bg">
-                                        <div class="factor-bar-fill medium" id="factorGrowth" style="width: 50%"></div>
-                                    </div>
-                                    <span class="factor-value" id="factorGrowthScore">50</span>
-                                </div>
-                                <div class="factor-row">
-                                    <span class="factor-name">Safety</span>
-                                    <div class="factor-bar-bg">
-                                        <div class="factor-bar-fill medium" id="factorSafety" style="width: 50%"></div>
-                                    </div>
-                                    <span class="factor-value" id="factorSafetyScore">50</span>
-                                </div>
-                                <div class="factor-row">
-                                    <span class="factor-name">Technicals</span>
-                                    <div class="factor-bar-bg">
-                                        <div class="factor-bar-fill medium" id="factorTechnicals" style="width: 50%">
+                    <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 24px;">
+                        <!-- Left Column: Gauge & Analysis -->
+                        <div style="display: flex; flex-direction: column; gap: 24px;">
+                            <!-- Expert Score Gauge Card -->
+                            <div
+                                style="background: var(--bg-secondary); border-radius: 12px; padding: 24px; border: 1px solid var(--border-color);">
+                                <h4
+                                    style="margin: 0 0 20px 0; display: flex; align-items: center; gap: 8px; color: var(--text-secondary);">
+                                    <span class="material-icons" style="font-size: 20px;">speed</span> Expert Consensus
+                                </h4>
+                                <div style="display: flex; align-items: center; gap: 40px;">
+                                    <div style="position: relative; width: 180px; height: 90px; overflow: hidden;">
+                                        <div id="gaugeArc"
+                                            style="width: 180px; height: 180px; border-radius: 50%; background: conic-gradient(from 180deg, #ef4444 0deg, #f59e0b 90deg, #22c55e 180deg, transparent 180deg); transform: rotate(0deg);">
                                         </div>
-                                    </div>
-                                    <span class="factor-value" id="factorTechnicalsScore">50</span>
-                                </div>
-                                <div class="factor-row">
-                                    <span class="factor-name">Sentiment</span>
-                                    <div class="factor-bar-bg">
-                                        <div class="factor-bar-fill medium" id="factorSentiment" style="width: 50%">
+                                        <div
+                                            style="position: absolute; bottom: 0; left: 10px; width: 160px; height: 160px; background: var(--bg-secondary); border-radius: 50%;">
                                         </div>
+                                        <div id="gaugeNeedle"
+                                            style="position: absolute; bottom: 0; left: 90px; width: 4px; height: 80px; background: var(--text-primary); transform-origin: bottom center; transform: rotate(-90deg); transition: transform 1s cubic-bezier(0.4, 0, 0.2, 1);">
+                                        </div>
+                                        <div
+                                            style="position: absolute; bottom: -5px; left: 85px; width: 10px; height: 10px; background: var(--text-primary); border-radius: 50%;">
+                                        </div>
+                                        <div id="gaugeScore"
+                                            style="position: absolute; bottom: 0; left: 0; right: 0; text-align: center; font-size: 24px; font-weight: 800;">
+                                            75</div>
                                     </div>
-                                    <span class="factor-value" id="factorSentimentScore">50</span>
+                                    <div style="flex: 1;">
+                                        <div id="gaugeSignal"
+                                            style="font-size: 24px; font-weight: 700; color: #22c55e; margin-bottom: 8px;">
+                                            STRONG BUY</div>
+                                        <p
+                                            style="color: var(--text-muted); font-size: 13px; margin: 0; line-height: 1.5;">
+                                            Based on <strong id="gaugeSignalSource">AI Analysis</strong> showing
+                                            positive momentum and strong fundamentals relative to peers.
+                                        </p>
+                                    </div>
                                 </div>
-                                <div class="factor-row">
-                                    <span class="factor-name">Quality</span>
-                                    <div class="factor-bar-bg">
-                                        <div class="factor-bar-fill medium" id="factorQuality" style="width: 50%"></div>
+                            </div>
+
+                            <!-- Key Fundamentals Grid -->
+                            <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px;">
+                                <div
+                                    style="background: var(--bg-secondary); padding: 16px; border-radius: 8px; border: 1px solid var(--border-color);">
+                                    <div style="color: var(--text-muted); font-size: 12px; margin-bottom: 4px;">P/E
+                                        Ratio</div>
+                                    <div id="statPE" style="font-weight: 600; font-size: 16px;">--</div>
+                                </div>
+                                <div
+                                    style="background: var(--bg-secondary); padding: 16px; border-radius: 8px; border: 1px solid var(--border-color);">
+                                    <div style="color: var(--text-muted); font-size: 12px; margin-bottom: 4px;">P/B
+                                        Ratio</div>
+                                    <div id="statPB" style="font-weight: 600; font-size: 16px;">--</div>
+                                </div>
+                                <div
+                                    style="background: var(--bg-secondary); padding: 16px; border-radius: 8px; border: 1px solid var(--border-color);">
+                                    <div style="color: var(--text-muted); font-size: 12px; margin-bottom: 4px;">ROE
                                     </div>
-                                    <span class="factor-value" id="factorQualityScore">50</span>
+                                    <div id="statROE" style="font-weight: 600; font-size: 16px;">--</div>
+                                </div>
+                                <div
+                                    style="background: var(--bg-secondary); padding: 16px; border-radius: 8px; border: 1px solid var(--border-color);">
+                                    <div style="color: var(--text-muted); font-size: 12px; margin-bottom: 4px;">Div
+                                        Yield</div>
+                                    <div id="statDiv" style="font-weight: 600; font-size: 16px;">--</div>
+                                </div>
+                            </div>
+
+                            <!-- AI Analyst Insight -->
+                            <div
+                                style="background: var(--bg-secondary); border-radius: 12px; padding: 24px; border: 1px solid var(--border-color);">
+                                <h4
+                                    style="margin: 0 0 16px 0; display: flex; align-items: center; gap: 8px; color: var(--text-secondary);">
+                                    <span class="material-icons" style="color: var(--accent-primary);">psychology</span>
+                                    AI Analyst Insight
+                                </h4>
+                                <div id="aiAnalystInsight"
+                                    style="font-size: 14px; line-height: 1.6; color: var(--text-primary);">
+                                    Loading AI analysis...
                                 </div>
                             </div>
                         </div>
 
-                        <!-- Key Metrics -->
-                        <div class="research-card">
-                            <h4>📊 Key Metrics</h4>
-                            <div class="metrics-grid" id="researchMetrics">
-                                <div class="metric-item">
-                                    <span class="metric-label">P/E Ratio</span>
-                                    <span class="metric-value" id="metricPE">--</span>
-                                </div>
-                                <div class="metric-item">
-                                    <span class="metric-label">P/B Ratio</span>
-                                    <span class="metric-value" id="metricPB">--</span>
-                                </div>
-                                <div class="metric-item">
-                                    <span class="metric-label">ROE</span>
-                                    <span class="metric-value" id="metricROE">--</span>
-                                </div>
-                                <div class="metric-item">
-                                    <span class="metric-label">ROCE</span>
-                                    <span class="metric-value" id="metricROCE">--</span>
-                                </div>
-                                <div class="metric-item">
-                                    <span class="metric-label">D/E Ratio</span>
-                                    <span class="metric-value" id="metricDE">--</span>
-                                </div>
-                                <div class="metric-item">
-                                    <span class="metric-label">Div Yield</span>
-                                    <span class="metric-value" id="metricDivYield">--</span>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Related Stocks -->
-                        <div class="research-card">
-                            <h4>🔗 Related Stocks</h4>
-                            <div class="related-stocks" id="relatedStocks">
-                                <p class="text-muted">--</p>
+                        <!-- Right Column: News Feed -->
+                        <div
+                            style="background: var(--bg-secondary); border-radius: 12px; padding: 24px; border: 1px solid var(--border-color); display: flex; flex-direction: column;">
+                            <h4
+                                style="margin: 0 0 20px 0; display: flex; align-items: center; gap: 8px; color: var(--text-secondary);">
+                                <span class="material-icons">article</span> Latest News
+                            </h4>
+                            <div id="researchNewsList"
+                                style="overflow-y: auto; max-height: 500px; padding-right: 8px; flex: 1;">
+                                <div class="empty-state" style="padding: 20px 0;">No relevant news</div>
                             </div>
                         </div>
                     </div>
                 </div>
 
                 <div class="empty-state" id="researchEmpty">
-                    <span>🔬</span>
-                    <p>Enter a stock symbol above to start research</p>
+                    <span style="font-size: 48px; margin-bottom: 16px;">🔬</span>
+                    <p style="font-size: 18px; color: var(--text-muted);">Enter a stock symbol above to start research
+                    </p>
                 </div>
             </section>
 
@@ -744,22 +776,9 @@
                             </div>
                             <label class="switch">
                                 <input type="checkbox" id="systemToggle" checked>
-                                <span class="slider round"></span>
                             </label>
                         </div>
-
-                        <div class="settings-row"
-                            style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                            <div>
-                                <h4 style="margin-bottom: 4px;">AI Features</h4>
-                                <p style="font-size: 13px; color: var(--text-secondary);">Enable Gemini-powered analysis
-                                    and chat</p>
-                            </div>
-                            <label class="switch">
-                                <input type="checkbox" id="aiToggle" checked>
-                                <span class="slider round"></span>
-                            </label>
-                        </div>
+                        <!-- AI Features section REMOVED as per user request -->
                     </div>
 
                     <!-- Telegram Auth -->
@@ -805,6 +824,21 @@
                     <!-- Gemini AI Settings -->
                     <div class="settings-card">
                         <h3>🤖 Gemini AI Configuration</h3>
+
+                        <!-- AI Toggle -->
+                        <div class="form-group"
+                            style="display: flex; align-items: center; gap: 16px; margin-bottom: 20px; padding: 12px; background: var(--bg-secondary); border-radius: 8px;">
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="aiEnabledToggle">
+                                <span class="toggle-slider"></span>
+                            </label>
+                            <div>
+                                <strong id="aiStatusText">AI Disabled</strong>
+                                <p style="font-size: 12px; color: var(--text-muted); margin: 0;">Toggle to
+                                    enable/disable Gemini AI across the system</p>
+                            </div>
+                        </div>
+
                         <div class="form-group">
                             <label>Gemini API Key</label>
                             <input type="password" id="geminiApiKey" placeholder="Enter your Gemini API key">
@@ -822,6 +856,253 @@
                         </div>
                         <button class="btn btn-primary" id="saveGeminiBtn">Save Gemini Settings</button>
                         <span id="geminiSaveStatus" style="margin-left: 12px; color: var(--text-muted);"></span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Pattern Scout Section -->
+            <section class="section hidden" id="patterns-section">
+                <div class="section-header">
+                    <div class="header-main-group">
+                        <h3>🔍 Pattern Scout</h3>
+                        <p style="color: var(--text-muted); margin: 4px 0 0 0; font-size: 13px;">Technical pattern
+                            recognition inspired by StockEdge</p>
+                    </div>
+                </div>
+                <div class="search-bar" style="margin-bottom: 24px;">
+                    <input type="text" id="patternScoutInput" placeholder="Enter stock symbol (e.g., TATASTEEL)">
+                    <button class="btn btn-primary" id="patternScoutBtn">Analyze Patterns</button>
+                </div>
+                <div id="patternScoutResults" class="empty-state">
+                    <span style="font-size: 48px;">📊</span>
+                    <p>Enter a stock symbol to analyze technical patterns</p>
+                </div>
+            </section>
+
+            <!-- QVM Engine Section -->
+            <section class="section hidden" id="qvm-section">
+                <div class="section-header">
+                    <div class="header-main-group">
+                        <h3>📊 QVM Engine</h3>
+                        <p style="color: var(--text-muted); margin: 4px 0 0 0; font-size: 13px;">
+                            Quality-Valuation-Momentum scoring inspired by Trendlyne</p>
+                    </div>
+                </div>
+                <div class="search-bar" style="margin-bottom: 24px;">
+                    <input type="text" id="qvmInput" placeholder="Enter stock symbol (e.g., RELIANCE)">
+                    <button class="btn btn-primary" id="qvmAnalyzeBtn">Analyze QVM</button>
+                </div>
+                <div id="qvmResults" class="empty-state">
+                    <span style="font-size: 48px;">📈</span>
+                    <p>Enter a stock symbol to get Quality, Valuation & Momentum scores</p>
+                </div>
+            </section>
+
+            <!-- Con-Call Analyst Section -->
+            <section class="section hidden" id="concall-section">
+                <div class="section-header">
+                    <div class="header-main-group">
+                        <h3>📄 Con-Call Analyst</h3>
+                        <p style="color: var(--text-muted); margin: 4px 0 0 0; font-size: 13px;">AI-powered earnings
+                            call analysis inspired by NotebookLM</p>
+                    </div>
+                </div>
+                <div class="settings-card" style="max-width: 600px;">
+                    <h4>Upload Earnings Call Transcript or Annual Report</h4>
+                    <p style="color: var(--text-muted); margin-bottom: 16px;">Upload a PDF file to analyze. AI will
+                        extract Growth Drivers, Headwinds, and Red Flags.</p>
+                    <div class="form-group">
+                        <input type="file" id="concallFileInput" accept=".pdf" style="margin-bottom: 12px;">
+                    </div>
+                    <button class="btn btn-primary" id="concallAnalyzeBtn">🔬 Analyze with AI</button>
+                    <p id="concallStatus" style="color: var(--text-muted); margin-top: 8px;"></p>
+                </div>
+                <div id="concallResults" style="margin-top: 24px;"></div>
+            </section>
+
+            <!-- Market Mood Section -->
+            <section class="section hidden" id="mood-section">
+                <div class="section-header">
+                    <div class="header-main-group">
+                        <h3>🌡️ Market Mood</h3>
+                        <p style="color: var(--text-muted); margin: 4px 0 0 0; font-size: 13px;">Fear & Greed Index
+                            inspired by Tickertape MMI</p>
+                    </div>
+                    <button class="btn btn-icon-round refresh-btn" onclick="loadMarketMood()">🔄</button>
+                </div>
+                <div id="marketMoodContent" class="empty-state">
+                    <span class="loading"></span>
+                    <p>Loading market mood data...</p>
+                </div>
+            </section>
+
+            <!-- AI Assistant Section - Comprehensive Dashboard -->
+            <section class="section hidden" id="ai-section">
+                <div class="section-header">
+                    <div class="header-main-group">
+                        <h3>🤖 AI Recommendations Dashboard</h3>
+                        <p style="color: var(--text-muted); margin: 4px 0 0 0; font-size: 13px;">AI-powered analysis of
+                            24h market signals, news, and Telegram insights</p>
+                    </div>
+                    <button class="btn btn-secondary" onclick="refreshAiDashboard()">
+                        <span class="material-icons" style="font-size: 18px;">refresh</span>
+                        Refresh Analysis
+                    </button>
+                </div>
+
+                <!-- AI Stats Row -->
+                <div class="ai-stats-row"
+                    style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px;">
+                    <div class="stat-card"
+                        style="background: var(--bg-secondary); padding: 20px; border-radius: 12px; border: 1px solid var(--border-color);">
+                        <div style="display: flex; align-items: center; gap: 12px;">
+                            <span class="material-icons" style="font-size: 32px; color: #22c55e;">trending_up</span>
+                            <div>
+                                <div id="aiBullishCount" style="font-size: 28px; font-weight: 700; color: #22c55e;">--
+                                </div>
+                                <div style="color: var(--text-muted); font-size: 12px;">Bullish Signals (24h)</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="stat-card"
+                        style="background: var(--bg-secondary); padding: 20px; border-radius: 12px; border: 1px solid var(--border-color);">
+                        <div style="display: flex; align-items: center; gap: 12px;">
+                            <span class="material-icons" style="font-size: 32px; color: #ef4444;">trending_down</span>
+                            <div>
+                                <div id="aiBearishCount" style="font-size: 28px; font-weight: 700; color: #ef4444;">--
+                                </div>
+                                <div style="color: var(--text-muted); font-size: 12px;">Bearish Signals (24h)</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="stat-card"
+                        style="background: var(--bg-secondary); padding: 20px; border-radius: 12px; border: 1px solid var(--border-color);">
+                        <div style="display: flex; align-items: center; gap: 12px;">
+                            <span class="material-icons" style="font-size: 32px; color: #f59e0b;">article</span>
+                            <div>
+                                <div id="aiNewsCount"
+                                    style="font-size: 28px; font-weight: 700; color: var(--text-primary);">--</div>
+                                <div style="color: var(--text-muted); font-size: 12px;">News Analyzed (24h)</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="stat-card"
+                        style="background: var(--bg-secondary); padding: 20px; border-radius: 12px; border: 1px solid var(--border-color);">
+                        <div style="display: flex; align-items: center; gap: 12px;">
+                            <span class="material-icons" style="font-size: 32px; color: #6366f1;">chat</span>
+                            <div>
+                                <div id="aiTelegramCount"
+                                    style="font-size: 28px; font-weight: 700; color: var(--text-primary);">--</div>
+                                <div style="color: var(--text-muted); font-size: 12px;">Telegram Signals (24h)</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Market Mood & Top Picks Row -->
+                <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 24px; margin-bottom: 24px;">
+                    <!-- Market Mood Card -->
+                    <div class="market-mood-card"
+                        style="background: var(--bg-secondary); padding: 24px; border-radius: 12px; border: 1px solid var(--border-color);">
+                        <h4 style="margin: 0 0 16px 0; display: flex; align-items: center; gap: 8px;">
+                            <span class="material-icons">psychology</span>
+                            AI Market Mood
+                        </h4>
+                        <div id="aiMarketMood" style="text-align: center; padding: 20px 0;">
+                            <div id="moodEmoji" style="font-size: 64px; margin-bottom: 12px;">📊</div>
+                            <div id="moodLabel" style="font-size: 24px; font-weight: 600; color: var(--text-primary);">
+                                Analyzing...</div>
+                            <p id="moodDescription" style="color: var(--text-muted); margin-top: 8px; font-size: 13px;">
+                                Loading market sentiment...</p>
+                        </div>
+                        <div id="moodMeter"
+                            style="height: 8px; background: linear-gradient(to right, #ef4444, #f59e0b, #22c55e); border-radius: 4px; position: relative;">
+                            <div id="moodIndicator"
+                                style="position: absolute; top: -4px; left: 50%; width: 16px; height: 16px; background: white; border-radius: 50%; border: 2px solid var(--accent-primary); transform: translateX(-50%);">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- AI Top Picks -->
+                    <div class="ai-top-picks"
+                        style="background: var(--bg-secondary); padding: 24px; border-radius: 12px; border: 1px solid var(--border-color);">
+                        <h4 style="margin: 0 0 16px 0; display: flex; align-items: center; gap: 8px;">
+                            <span class="material-icons" style="color: #fbbf24;">star</span>
+                            AI Top Stock Picks (Buy Now)
+                        </h4>
+                        <div id="aiTopPicksGrid"
+                            style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;">
+                            <div style="text-align: center; color: var(--text-muted); padding: 40px;">Loading
+                                recommendations...</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Telegram Signals Analysis & Purchase Suggestions -->
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 24px;">
+                    <!-- Recent Telegram Signals -->
+                    <div class="telegram-signals-card"
+                        style="background: var(--bg-secondary); padding: 24px; border-radius: 12px; border: 1px solid var(--border-color);">
+                        <h4 style="margin: 0 0 16px 0; display: flex; align-items: center; gap: 8px;">
+                            <span class="material-icons" style="color: #6366f1;">telegram</span>
+                            Recent Telegram Signals
+                        </h4>
+                        <div id="aiTelegramSignals" style="max-height: 300px; overflow-y: auto;">
+                            <div style="text-align: center; color: var(--text-muted); padding: 40px;">Loading signals...
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- AI Purchase Suggestions -->
+                    <div class="purchase-suggestions-card"
+                        style="background: var(--bg-secondary); padding: 24px; border-radius: 12px; border: 1px solid var(--border-color);">
+                        <h4 style="margin: 0 0 16px 0; display: flex; align-items: center; gap: 8px;">
+                            <span class="material-icons" style="color: #22c55e;">shopping_cart</span>
+                            AI Purchase Suggestions
+                        </h4>
+                        <div id="aiPurchaseSuggestions" style="max-height: 300px; overflow-y: auto;">
+                            <div style="text-align: center; color: var(--text-muted); padding: 40px;">Analyzing best
+                                opportunities...</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Stock Analysis from News -->
+                <div class="news-analysis-card"
+                    style="background: var(--bg-secondary); padding: 24px; border-radius: 12px; border: 1px solid var(--border-color); margin-bottom: 24px;">
+                    <h4 style="margin: 0 0 16px 0; display: flex; align-items: center; gap: 8px;">
+                        <span class="material-icons" style="color: #f59e0b;">analytics</span>
+                        24h News & Stock Analysis
+                    </h4>
+                    <div id="aiNewsAnalysis" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px;">
+                        <div style="text-align: center; color: var(--text-muted); padding: 40px; grid-column: span 2;">
+                            Loading news analysis...</div>
+                    </div>
+                </div>
+
+                <!-- AI Chat (Compact) -->
+                <div class="ai-chat-compact"
+                    style="background: var(--bg-secondary); padding: 24px; border-radius: 12px; border: 1px solid var(--border-color);">
+                    <h4 style="margin: 0 0 16px 0; display: flex; align-items: center; gap: 8px;">
+                        <span class="material-icons" style="color: var(--accent-primary);">smart_toy</span>
+                        Ask AI Assistant
+                    </h4>
+                    <div id="aiChatMessages"
+                        style="background: var(--bg-tertiary); min-height: 150px; max-height: 250px; overflow-y: auto; padding: 16px; border-radius: 8px; margin-bottom: 12px;">
+                        <div class="ai-message incoming" style="display: flex; gap: 12px; margin-bottom: 12px;">
+                            <span class="material-icons"
+                                style="color: var(--accent-primary); font-size: 20px;">smart_toy</span>
+                            <p
+                                style="background: var(--bg-secondary); padding: 10px 14px; border-radius: 8px; margin: 0; font-size: 14px;">
+                                Ask me anything about stocks, get analysis, or request specific recommendations!</p>
+                        </div>
+                    </div>
+                    <div style="display: flex; gap: 12px;">
+                        <input type="text" id="aiChatInput"
+                            placeholder="e.g., Should I buy RELIANCE today? or Analyze TCS..."
+                            style="flex: 1; padding: 12px 16px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--bg-primary); color: var(--text-primary);"
+                            onkeypress="if(event.key==='Enter') sendAiChat()">
+                        <button class="btn btn-primary" onclick="sendAiChat()" style="padding: 12px 24px;">Send</button>
                     </div>
                 </div>
             </section>
@@ -1049,34 +1330,7 @@
             </div>
         </main>
     </div>
-
-    <!-- Chatbot Toggler -->
-    <button class="chatbot-toggler">
-        <span class="material-icons">chat</span>
-        <span class="material-icons">close</span>
-    </button>
-
-    <div class="chatbot">
-        <header>
-            <h2>AI Assistant</h2>
-            <span class="close-btn material-icons">close</span>
-        </header>
-        <ul class="chatbox">
-            <li class="chat incoming">
-                <span class="material-icons">smart_toy</span>
-                <p>Hi! I'm your AI market assistant. How can I help you today?</p>
-            </li>
-        </ul>
-        <div class="suggestion-chips">
-            <div class="chip" onclick="handleChip('Analyze reliance')">📊 Analyze Reliance</div>
-            <div class="chip" onclick="handleChip('Top stocks to buy')">🚀 Top Picks</div>
-            <div class="chip" onclick="handleChip('Market news')">📰 Market News</div>
-        </div>
-        <div class="chat-input">
-            <textarea placeholder="Ask something..." required></textarea>
-            <span id="send-btn" class="material-icons">send</span>
-        </div>
-    </div>
+    <!-- AI Chatbot REMOVED as per user request -->
 
     <script src="/static/app.js"></script>
 </body>

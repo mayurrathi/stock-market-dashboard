@@ -3,7 +3,8 @@ Telegram Monitor - Monitors Telegram channels for stock market data/signals
 """
 import asyncio
 import re
-from telethon import TelegramClient, events
+from telethon import TelegramClient, events, errors
+from telethon.errors import FloodWaitError
 from .database import SessionLocal
 from .models import TelegramMessage, Log, Config, FetchLog, Recommendation
 from .analyzer import analyzer
@@ -50,7 +51,15 @@ class TelegramMonitor:
             self.client = None
         
         self.client = TelegramClient(session_name, api_id, api_hash)
-        await self.client.connect()
+        try:
+            await self.client.connect()
+        except FloodWaitError as e:
+            logger.warning(f"Telegram FloodWait triggered during init. Waiting {e.seconds}s required. Skipping connection.")
+            # We don't wait here to avoid blocking server startup
+            self.client = None
+        except Exception as e:
+            logger.error(f"Failed to connect Telegram client: {e}")
+            self.client = None
 
 
     async def _ensure_connected(self):
@@ -105,7 +114,11 @@ class TelegramMonitor:
 
     async def start_monitoring(self, chat_ids_or_usernames: list):
         """Start monitoring specified Telegram channels for new messages"""
-        if not self.client or not await self.client.is_user_authorized():
+        if not self.client:
+            logger.warning("Telegram client not initialized. Cannot start monitoring.")
+            return
+
+        if not await self.client.is_user_authorized():
             raise Exception("Client not authorized")
 
         self.monitored_chats = chat_ids_or_usernames

@@ -381,7 +381,8 @@ class StockAnalyzer:
         db = SessionLocal()
         recommendations = []
         
-        timeframes = ['next_day', 'next_week', 'next_month']
+        # Include ALL timeframes including long-term ones
+        timeframes = ['next_day', 'next_week', 'next_month', '1yr', '2yr', '5yr', '10yr']
         
         try:
             # Get stocks from analysis
@@ -402,19 +403,8 @@ class StockAnalyzer:
                     rec = self.generate_recommendation(symbol, sentiment_data, timeframe)
                     
                     if rec:
-                        # ALWAYS use LLM for reasoning to avoid repetitive templates
-                        # Fallback to template only on error
-                        try:
-                            context = f"Symbol: {symbol}. Timeframe: {timeframe}. Signals: {sentiment_data}. Market Cap: {self._get_stock_category(symbol)}."
-                            llm_reasoning = await llm_service.generate_reasoning(
-                                symbol=symbol,
-                                signal_type=rec['action'],
-                                context=context
-                            )
-                            if llm_reasoning:
-                                rec['reasoning'] = llm_reasoning
-                        except Exception as e:
-                            logger.warning(f"LLM Reasoning failed for {symbol}: {e}")
+                        # LLM reasoning DISABLED as per user request - using template reasoning only
+                        # The template reasoning is already set in generate_recommendation()
 
                         # Add stock category label
                         rec['category'] = self._get_stock_category(symbol)

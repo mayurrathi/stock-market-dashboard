@@ -7,40 +7,7 @@ import random
 
 # Comprehensive stock database with fundamental data (simulated)
 # In production, this would be fetched from a financial API
-STOCK_DATA = {
-    "RELIANCE": {"pe": 28.5, "pb": 2.1, "roe": 12.5, "roce": 10.8, "de": 0.45, "div_yield": 0.35, "mcap": "Large Cap"},
-    "TCS": {"pe": 32.1, "pb": 14.2, "roe": 48.5, "roce": 60.2, "de": 0.02, "div_yield": 1.2, "mcap": "Large Cap"},
-    "HDFCBANK": {"pe": 21.5, "pb": 3.2, "roe": 16.8, "roce": 0, "de": 0, "div_yield": 1.1, "mcap": "Large Cap"},
-    "INFY": {"pe": 28.8, "pb": 8.5, "roe": 31.2, "roce": 40.5, "de": 0.05, "div_yield": 2.1, "mcap": "Large Cap"},
-    "ICICIBANK": {"pe": 18.2, "pb": 2.8, "roe": 17.5, "roce": 0, "de": 0, "div_yield": 0.8, "mcap": "Large Cap"},
-    "HINDUNILVR": {"pe": 58.5, "pb": 12.1, "roe": 22.5, "roce": 28.5, "de": 0.1, "div_yield": 1.5, "mcap": "Large Cap"},
-    "SBIN": {"pe": 12.5, "pb": 1.8, "roe": 15.2, "roce": 0, "de": 0, "div_yield": 1.8, "mcap": "Large Cap"},
-    "BHARTIARTL": {"pe": 45.2, "pb": 5.5, "roe": 14.2, "roce": 12.5, "de": 1.2, "div_yield": 0.5, "mcap": "Large Cap"},
-    "ITC": {"pe": 28.5, "pb": 7.8, "roe": 28.5, "roce": 35.2, "de": 0.01, "div_yield": 3.2, "mcap": "Large Cap"},
-    "KOTAKBANK": {"pe": 24.5, "pb": 3.5, "roe": 14.8, "roce": 0, "de": 0, "div_yield": 0.1, "mcap": "Large Cap"},
-    "LT": {"pe": 32.5, "pb": 4.2, "roe": 14.5, "roce": 18.2, "de": 0.85, "div_yield": 0.8, "mcap": "Large Cap"},
-    "AXISBANK": {"pe": 14.8, "pb": 2.1, "roe": 15.5, "roce": 0, "de": 0, "div_yield": 0.5, "mcap": "Large Cap"},
-    "ASIANPAINT": {"pe": 72.5, "pb": 18.5, "roe": 28.2, "roce": 35.5, "de": 0.15, "div_yield": 0.7, "mcap": "Large Cap"},
-    "MARUTI": {"pe": 28.5, "pb": 4.2, "roe": 15.8, "roce": 18.5, "de": 0.02, "div_yield": 0.6, "mcap": "Large Cap"},
-    "BAJFINANCE": {"pe": 38.5, "pb": 7.2, "roe": 22.5, "roce": 0, "de": 3.5, "div_yield": 0.4, "mcap": "Large Cap"},
-    "TITAN": {"pe": 85.2, "pb": 18.5, "roe": 25.8, "roce": 32.5, "de": 0.25, "div_yield": 0.3, "mcap": "Large Cap"},
-    "SUNPHARMA": {"pe": 32.5, "pb": 4.8, "roe": 15.2, "roce": 18.5, "de": 0.12, "div_yield": 0.8, "mcap": "Large Cap"},
-    "WIPRO": {"pe": 22.5, "pb": 3.8, "roe": 18.5, "roce": 22.5, "de": 0.08, "div_yield": 1.5, "mcap": "Large Cap"},
-    "TATASTEEL": {"pe": 8.5, "pb": 1.2, "roe": 18.5, "roce": 15.2, "de": 0.85, "div_yield": 2.5, "mcap": "Large Cap"},
-    "TECHM": {"pe": 18.5, "pb": 3.5, "roe": 20.5, "roce": 25.5, "de": 0.05, "div_yield": 2.8, "mcap": "Large Cap"},
-    # Mid Caps
-    "ZOMATO": {"pe": 0, "pb": 8.5, "roe": -5.2, "roce": -4.5, "de": 0, "div_yield": 0, "mcap": "Mid Cap"},
-    "IRCTC": {"pe": 55.2, "pb": 22.5, "roe": 45.5, "roce": 55.2, "de": 0, "div_yield": 0.8, "mcap": "Mid Cap"},
-    "TRENT": {"pe": 120.5, "pb": 25.5, "roe": 22.5, "roce": 28.5, "de": 0.35, "div_yield": 0.2, "mcap": "Mid Cap"},
-    "DMART": {"pe": 95.5, "pb": 12.5, "roe": 14.5, "roce": 18.5, "de": 0.02, "div_yield": 0, "mcap": "Mid Cap"},
-    "PIDILITIND": {"pe": 75.5, "pb": 18.2, "roe": 25.5, "roce": 32.5, "de": 0.08, "div_yield": 0.5, "mcap": "Mid Cap"},
-    "HAL": {"pe": 35.5, "pb": 8.5, "roe": 25.5, "roce": 32.5, "de": 0.02, "div_yield": 1.2, "mcap": "Mid Cap"},
-    "BEL": {"pe": 42.5, "pb": 9.5, "roe": 22.5, "roce": 28.5, "de": 0.01, "div_yield": 1.5, "mcap": "Mid Cap"},
-    "POLYCAB": {"pe": 45.5, "pb": 8.5, "roe": 22.5, "roce": 28.5, "de": 0.05, "div_yield": 0.4, "mcap": "Mid Cap"},
-    "TATAPOWER": {"pe": 32.5, "pb": 3.8, "roe": 12.5, "roce": 10.5, "de": 1.2, "div_yield": 0.5, "mcap": "Mid Cap"},
-    "ADANIGREEN": {"pe": 150.5, "pb": 25.5, "roe": 8.5, "roce": 6.5, "de": 5.5, "div_yield": 0, "mcap": "Mid Cap"},
-}
-
+from .stock_api import STOCK_DATA
 
 # 50+ Stock Screening Strategies
 STOCK_SCREENS = {

@@ -150,6 +150,35 @@ async def telegram_background_task():
             logger.error(f"Error in background Telegram fetcher: {e}")
             await asyncio.sleep(300)  # Wait 5 minutes before retrying on error
 
+
+async def recommendation_background_task():
+    """Background task to auto-generate recommendations every 60 minutes"""
+    logger.info("Starting background recommendation generator task (60m interval)")
+    # Initial wait of 5 minutes to let the server settle
+    await asyncio.sleep(300)
+    
+    while True:
+        try:
+            logger.info("Scheduled background recommendation generation starting...")
+            now = datetime.now()
+            day_ago = now - timedelta(hours=24)
+            
+            # Run analysis
+            analysis_result = await analyzer.analyze_timeframe(day_ago, now)
+            
+            # Generate recommendations
+            recommendations = await analyzer.generate_all_recommendations(analysis_result)
+            logger.info(f"Background recommendation generation complete: {len(recommendations)} new recommendations")
+            
+            # Wait 60 minutes
+            await asyncio.sleep(3600)
+        except asyncio.CancelledError:
+            logger.info("Background recommendation generator task cancelled")
+            break
+        except Exception as e:
+            logger.error(f"Error in background recommendation generator: {e}")
+            await asyncio.sleep(600)  # Wait 10 minutes before retrying on error
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup and shutdown events"""
@@ -163,6 +192,9 @@ async def lifespan(app: FastAPI):
     
     # Start background Telegram fetcher (15 min interval)
     telegram_task = asyncio.create_task(telegram_background_task())
+    
+    # Start background Recommendation generator (60 min interval)
+    recommendation_task = asyncio.create_task(recommendation_background_task())
     
     # Try to restore Telegram session
     db = SessionLocal()
@@ -190,6 +222,7 @@ async def lifespan(app: FastAPI):
     # Cancel background tasks
     news_task.cancel()
     telegram_task.cancel()
+    recommendation_task.cancel()
     logger.info("Shutting down...")
 
 
@@ -1045,8 +1078,8 @@ async def get_stock_detail(symbol: str, db: Session = Depends(get_db)):
     external_links = {
         "screener": f"https://www.screener.in/company/{symbol}/",
         "nse": f"https://www.nseindia.com/get-quotes/equity?symbol={symbol}",
-        "bse": f"https://www.bseindia.com/stock-share-price/x/y/{symbol}/",
-        "moneycontrol": f"https://www.moneycontrol.com/stocksmarketsindia/?classic=true&q={symbol}",
+        "bse": f"https://www.google.com/search?q=site:bseindia.com+{symbol}+stock",
+        "moneycontrol": f"https://www.google.com/search?q=site:moneycontrol.com+{symbol}+stock+price",
         "tradingview": f"https://www.tradingview.com/symbols/NSE-{symbol}/"
     }
     
@@ -1617,29 +1650,42 @@ async def get_all_screens():
 
 @app.get("/api/screens/{screen_id}/run")
 async def run_screen(screen_id: str, db: Session = Depends(get_db)):
-    """Run a specific stock screen and return matching stocks from all NSE/BSE stocks"""
-    # Fetch all stocks from database for full coverage
+    """Run a specific stock screen and return matching stocks with LIVE data from Yahoo Finance"""
+    import asyncio
+    
+    # Fetch all active stocks from database
     all_stocks = db.query(Stock).filter(Stock.is_active == True).all()
     
-    # Build stock data dict from database + live fundamentals
-    stock_data = {}
-    for s in all_stocks:
-        # Get fundamental data if available (cached or simulated)
-        fundamentals = stock_api.get_fundamentals(s.symbol)
-        if fundamentals:
-            stock_data[s.symbol] = {
-                "pe": fundamentals.get("pe", 0),
-                "pb": fundamentals.get("pb", 0),
-                "roe": fundamentals.get("roe", 0),
-                "roce": fundamentals.get("roce", 0),
-                "de": fundamentals.get("de", 0),
-                "div_yield": fundamentals.get("div_yield", 0),
-                "mcap": s.cap_type + " Cap" if s.cap_type else "Mid Cap"
-            }
+    # For speed, limit to top 100 stocks for live data fetching
+    # Sort by cap_type priority: Large > Mid > Small
+    cap_priority = {"Large": 0, "Mid": 1, "Small": 2, None: 3}
+    sorted_stocks = sorted(all_stocks, key=lambda s: cap_priority.get(s.cap_type, 3))
+    priority_stocks = sorted_stocks[:100]
     
-    # Run screen with full data
+    # Fetch live fundamentals in parallel batches of 20
+    stock_data = {}
+    batch_size = 20
+    
+    for i in range(0, len(priority_stocks), batch_size):
+        batch = priority_stocks[i:i+batch_size]
+        tasks = [stock_api.get_live_fundamentals(s.symbol) for s in batch]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        for j, result in enumerate(results):
+            if isinstance(result, dict):
+                stock_data[batch[j].symbol] = result
+            elif not isinstance(result, Exception):
+                # Use fallback data
+                stock_data[batch[j].symbol] = stock_api.get_fundamentals(batch[j].symbol)
+    
+    # Add remaining stocks with cached/simulated data (for full coverage)
+    for s in sorted_stocks[100:]:
+        stock_data[s.symbol] = stock_api.get_fundamentals(s.symbol)
+    
+    # Run screen with combined data
     results = stock_screener.run_screen_with_data(screen_id, stock_data)
     screen_info = stock_screener.screens.get(screen_id, {})
+    
     return {
         "screen_id": screen_id,
         "screen_name": screen_info.get("name", screen_id),
@@ -1647,7 +1693,8 @@ async def run_screen(screen_id: str, db: Session = Depends(get_db)):
         "category": screen_info.get("category", ""),
         "matches": len(results),
         "stocks": results,
-        "total_scanned": len(stock_data)
+        "total_scanned": len(stock_data),
+        "live_data_count": min(100, len(priority_stocks))
     }
 
 
@@ -1910,11 +1957,22 @@ class SystemStatus(BaseModel):
     ai_features: bool
 
 @app.get("/api/stocks/list")
-async def get_supported_stocks():
-    """Get list of supported stocks for autocomplete"""
+async def get_supported_stocks(db: Session = Depends(get_db)):
+    """Get list of all active stocks for autocomplete - includes all NSE/BSE stocks"""
+    # Get all active stocks from database
+    stocks = db.query(Stock).filter(Stock.is_active == True).all()
+    
+    # Return combined list - database stocks take priority
+    result = [{"symbol": s.symbol, "name": s.name or s.symbol} for s in stocks]
+    
+    # Add any NSE_STOCKS not already in DB
     from .stock_api import NSE_STOCKS
-    # Just return simple list of {symbol, name}
-    return [{"symbol": s["symbol"], "name": s["name"]} for s in NSE_STOCKS]
+    db_symbols = {s.symbol for s in stocks}
+    for s in NSE_STOCKS:
+        if s["symbol"] not in db_symbols:
+            result.append({"symbol": s["symbol"], "name": s["name"]})
+    
+    return result
 
 
 @app.get("/api/system/status")
@@ -1955,6 +2013,101 @@ async def update_system_control(status: SystemStatus, db: Session = Depends(get_
             pass
     
     return {"success": True, "status": status}
+
+
+# ============== Quant Lab API Endpoints ==============
+
+@app.get("/api/quant/patterns/{symbol}")
+async def get_pattern_analysis(symbol: str):
+    """
+    Pattern Scout - Technical pattern recognition for a stock.
+    Returns RS, momentum indicators, detected patterns, and chart data.
+    """
+    from .quant import analyze_stock_patterns
+    
+    try:
+        result = analyze_stock_patterns(symbol.upper())
+        return result
+    except Exception as e:
+        logger.error(f"Pattern analysis failed for {symbol}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/quant/qvm/{symbol}")
+async def get_qvm_analysis(symbol: str):
+    """
+    QVM Engine - Quality, Valuation, Momentum composite scoring.
+    Returns individual scores and Investability Score (0-100).
+    """
+    from .quant import analyze_qvm
+    
+    try:
+        result = analyze_qvm(symbol.upper())
+        return result
+    except Exception as e:
+        logger.error(f"QVM analysis failed for {symbol}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/quant/market-mood")
+async def get_market_mood_analysis():
+    """
+    Market Mood Sensor - Fear & Greed Index based on VIX and NIFTY momentum.
+    Returns composite score (0-100) and market zone.
+    """
+    from .quant import get_market_mood
+    
+    try:
+        result = get_market_mood()
+        return result
+    except Exception as e:
+        logger.error(f"Market mood analysis failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+from fastapi import UploadFile, File
+
+@app.post("/api/quant/analyze-pdf")
+async def analyze_pdf_document(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db)
+):
+    """
+    Con-Call Analyst - Analyze earnings call transcript or annual report PDF.
+    Uses Gemini AI for structured analysis.
+    """
+    from .quant import analyze_earnings_call
+    
+    # Check if AI is enabled
+    ai_feat = db.query(Config).filter(Config.key == "ai_features_enabled").first()
+    if ai_feat and ai_feat.value == "false":
+        raise HTTPException(status_code=400, detail="AI features are disabled. Enable in Settings.")
+    
+    # Get Gemini API key
+    gemini_key = db.query(Config).filter(Config.key == "gemini_api_key").first()
+    if not gemini_key or not gemini_key.value:
+        raise HTTPException(status_code=400, detail="Gemini API key not configured. Add in Settings.")
+    
+    # Get model
+    gemini_model = db.query(Config).filter(Config.key == "gemini_model").first()
+    model = gemini_model.value if gemini_model else "gemini-2.0-flash"
+    
+    # Validate file type
+    if not file.filename.lower().endswith('.pdf'):
+        raise HTTPException(status_code=400, detail="Only PDF files are supported")
+    
+    try:
+        # Read file content
+        content = await file.read()
+        
+        # Analyze
+        result = await analyze_earnings_call(content, gemini_key.value, model)
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"PDF analysis failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ============== Static Files ==============

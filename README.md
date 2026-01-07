@@ -9,6 +9,8 @@ A real-time stock signal analyzer that fetches messages from Telegram channels, 
 - 📊 **Stock Price Tracking** - Live NIFTY 50, SENSEX, Bank NIFTY indices
 - 🎯 **AI Recommendations** - Multi-timeframe stock recommendations
 - 🤖 **Expert AI Engine** - "Verdict" based analysis with Bull/Bear scenarios & Factor Ratings
+- 🧬 **Research Console** - Premium dark-mode UI with Expert Gauge, Factor Analysis, and AI Insights
+- 📋 **Stock Screener** - 50+ Strategies (Value, Growth, Momentum) with Glossary and Instant Results
 - 📅 **Calendar Filters** - Filter by Last Hour, Today, Last Day, Last Week, Last Month
 - 🔍 **Signal Analysis** - Stock extraction, sentiment analysis, correlation
 
@@ -42,6 +44,7 @@ stock-market-dashboard/
 │   ├── monitor.py       # Telegram monitor
 │   ├── news_fetcher.py  # RSS feeds fetcher
 │   ├── stock_api.py     # Stock price API
+│   ├── screener.py      # Stock Screener engine
 │   └── analyzer.py      # AI analysis engine
 ├── frontend/
 │   ├── index.html       # Dashboard UI
@@ -104,6 +107,9 @@ Navigate to http://localhost:8001 in your browser.
 | `/api/news` | GET | Get market news |
 | `/api/news/fetch` | POST | Fetch RSS feeds |
 | `/api/stocks/indices` | GET | Get NIFTY/SENSEX |
+| `/api/research/{symbol}` | GET | Get deep research data |
+| `/api/screens` | GET | Get available screens |
+| `/api/screens/{id}/run` | GET | Run specific screen |
 | `/api/analyze` | POST | Analyze and recommend |
 | `/api/recommendations` | GET | Get recommendations |
 

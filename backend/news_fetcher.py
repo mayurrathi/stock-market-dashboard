@@ -55,7 +55,7 @@ RSS_FEEDS = {
     },
     "financial_express_markets": {
         "name": "Financial Express Markets",
-        "url": "https://www.financialexpress.com/indian-markets/rss",
+        "url": "https://www.financialexpress.com/market/rss",
     },
     "financial_express_companies": {
         "name": "Financial Express Companies",
