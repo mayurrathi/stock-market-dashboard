@@ -21,7 +21,7 @@ from .models import (
     StockPrice, Analysis, Recommendation, Log, FetchLog, WatchlistStock, AllStarPick, PickHistory, SECTOR_MAPPING, Stock
 )
 from .monitor import monitor
-from .news_fetcher import NewsFetcher
+from .news_fetcher import NewsFetcher, news_fetcher
 from .quant.signal_analyst import SignalAnalyst
 from .stock_api import stock_api, NSE_STOCKS
 from .analyzer import analyzer, LARGE_CAP_STOCKS, MID_CAP_STOCKS, SMALL_CAP_STOCKS, PENNY_STOCKS
@@ -180,6 +180,44 @@ async def recommendation_background_task():
             logger.error(f"Error in background recommendation generator: {e}")
             await asyncio.sleep(600)  # Wait 10 minutes before retrying on error
 
+
+async def cleanup_background_task():
+    """Background task to clean up old data every 24 hours"""
+    logger.info("Starting background database cleanup task (24h interval)")
+    while True:
+        try:
+            db = SessionLocal()
+            
+            # 1. Clean up old recommendations (older than 7 days)
+            seven_days_ago = datetime.now() - timedelta(days=7)
+            deleted_recs = db.query(Recommendation).filter(
+                Recommendation.created_at < seven_days_ago
+            ).delete()
+            
+            # 2. Clean up old analyses
+            deleted_analyses = db.query(Analysis).filter(
+                Analysis.created_at < seven_days_ago
+            ).delete()
+            
+            # 3. Clean up old logs (Keep only 3 days)
+            three_days_ago = datetime.now() - timedelta(days=3)
+            deleted_logs = db.query(Log).filter(
+                Log.timestamp < three_days_ago
+            ).delete()
+            deleted_fetch_logs = db.query(FetchLog).filter(
+                FetchLog.timestamp < three_days_ago
+            ).delete()
+            
+            db.commit()
+            if deleted_recs > 0 or deleted_logs > 0:
+                logger.info(f"Database cleanup complete: Removed {deleted_recs} recs, {deleted_analyses} analyses, {deleted_logs + deleted_fetch_logs} logs")
+            db.close()
+            
+        except Exception as e:
+            logger.error(f"Error in background cleanup task: {e}")
+            
+        await asyncio.sleep(86400)  # Wait 24h
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup and shutdown events"""
@@ -196,6 +234,9 @@ async def lifespan(app: FastAPI):
     
     # Start background Recommendation generator (60 min interval)
     recommendation_task = asyncio.create_task(recommendation_background_task())
+    
+    # Start background Cleanup (24h interval)
+    cleanup_task = asyncio.create_task(cleanup_background_task())
     
     # Try to restore Telegram session
     db = SessionLocal()
@@ -290,17 +331,23 @@ async def health_check():
 
 # ============== All Star Picks (Top 10 Daily) ==============
 
-def get_validity_expiry_ist() -> datetime:
-    """Get validity expiry (Next Market Open - 09:15 AM IST)"""
+def get_trading_session_expiry_ist() -> datetime:
+    """
+    Get validity expiry based on NSE Trading Session.
+    Rule: A trading session is persistent until 3:30 PM (Market Close).
+    - If NOW < 15:30: We are in 'Today's' session. Expiry is Today 15:30.
+    - If NOW >= 15:30: We are in 'Tomorrow's' session (Post-market). Expiry is Tomorrow 15:30.
+    
+    This ensures that any analysis generated after 3:30 PM persists throughout the NEXT trading day.
+    """
     import pytz
     ist = pytz.timezone('Asia/Kolkata')
     now_ist = datetime.now(ist)
     
-    # Target: 09:15 AM
-    expiry = now_ist.replace(hour=9, minute=15, second=0, microsecond=0)
+    # Target: 15:30 (3:30 PM)
+    expiry = now_ist.replace(hour=15, minute=30, second=0, microsecond=0)
     
-    # If currently past 9:15 AM, expires TOMORROW at 9:15 AM
-    # This keeps data valid throughout the trading day and the evening/night research session
+    # If currently past 15:30, it belongs to the NEXT trading day
     if now_ist >= expiry:
         expiry += timedelta(days=1)
     
@@ -310,9 +357,10 @@ def get_validity_expiry_ist() -> datetime:
     
     return expiry
 
+
 @app.get("/api/allstar")
 async def get_allstar_picks(db: Session = Depends(get_db)):
-    """Get All Star stock picks (10-50 picks, top 10 highlighted) - valid for the trading day"""
+    """Get All Star stock picks - persistent per Trading Session (until 3:30 PM)"""
     import pytz
     from .analyzer import ALL_STOCKS
     
@@ -320,16 +368,20 @@ async def get_allstar_picks(db: Session = Depends(get_db)):
     now = datetime.now(ist)
     valid_stocks = set(ALL_STOCKS)
     
-    # Check for valid cached picks - get up to 50
+    # Calculate the exact expiry timestamp for the CURRENT trading session
+    current_session_expiry = get_trading_session_expiry_ist()
+    
+    # Check for cached picks that match this exact session expiry
+    # This guarantees persistence: if generated for this session, they stay until 15:30
     cached = db.query(AllStarPick).filter(
-        AllStarPick.valid_until > now
+        AllStarPick.valid_until == current_session_expiry
     ).order_by(AllStarPick.confidence.desc()).limit(50).all()
     
-    # Filter out any invalid cached picks (legacy cleanup)
+    # Validate cached picks
     valid_cached = [p for p in cached if p.symbol in valid_stocks and len(p.symbol) > 2]
     
     if len(valid_cached) >= 10:
-        # Return cached picks with is_top_10 and rank
+        # Return persistent cached picks
         picks_data = []
         for idx, p in enumerate(valid_cached):
             picks_data.append({
@@ -348,24 +400,86 @@ async def get_allstar_picks(db: Session = Depends(get_db)):
                 "is_top_10": idx < 10,
                 "rank": idx + 1
             })
+        
+        # Determine logical label for the user
+        # If created_at was yesterday (after 3:30 PM), it's "Analysis for Today"
+        generated_time = valid_cached[0].created_at.astimezone(ist) if valid_cached[0].created_at else now
+        
+        # Select Absolute Picks (Top 5 High Growth Potential)
+        # Logic: Filter BUYs calculate Upside % ((Target - Current) / Current)
+        
+        # Helper to calculate upside
+        def get_upside(p):
+            if p.get("current_price") and p.get("target_price") and p["current_price"] > 0:
+                return ((p["target_price"] - p["current_price"]) / p["current_price"]) * 100
+            return 0
+
+        # Inject growth potential into all picks for UI use
+        for p in picks_data:
+            p["growth_potential"] = get_upside(p)
+
+        absolute_candidates = [p for p in picks_data if p["action"] == "BUY"]
+        # Sort by Upside Potential DESC
+        absolute_candidates.sort(key=lambda x: x["growth_potential"], reverse=True)
+        
+        # If not enough BUYs, fill with highest upside HOLDs
+        if len(absolute_candidates) < 5:
+            remaining = [p for p in picks_data if p not in absolute_candidates and p["action"] != "SELL"]
+            remaining.sort(key=lambda x: x["growth_potential"], reverse=True)
+            absolute_candidates.extend(remaining[:5 - len(absolute_candidates)])
+            
+        absolute_picks = absolute_candidates[:5]
+        
         return {
             "picks": picks_data,
+            "absolute_picks": absolute_picks,
             "cached": True,
-            "valid_until": valid_cached[0].valid_until.isoformat() if valid_cached else None,
-            "generated_at": valid_cached[0].created_at.isoformat() if valid_cached else None
+            "valid_until": current_session_expiry.isoformat(),
+            "generated_at": generated_time.isoformat()
         }
     
-    # Need to generate fresh picks - delete ALL existing picks to regenerate
+    # NO VALID CACHE for this session -> Invalidate ALL old picks and regenerate
+    # This handles the transition automatically:
+    # If it was 3:29 PM, we found cached.
+    # As soon as it hits 3:30:01 PM, 'current_session_expiry' jumps to tomorrow.
+    # The query for 'tomorrow' returns nothing.
+    # We enter this block, delete old data, and generate FRESH data for tomorrow.
+    
     db.query(AllStarPick).delete()
     db.commit()
     
-    # Generate new picks based on analysis
+    # Generate new picks
+    # ensure generate_allstar_picks uses the correct expiry
+    # check if generate_allstar_picks calls get_validity_expiry_ist inside
+    # We should probably pass the expiry to it or update it similarly
     picks = await generate_allstar_picks(db)
+    
+    # Helper to calculate upside
+    def get_upside(p):
+        if p.get("current_price") and p.get("target_price") and p["current_price"] > 0:
+            return ((p["target_price"] - p["current_price"]) / p["current_price"]) * 100
+        return 0
+
+    # Inject growth potential
+    for p in picks:
+        p["growth_potential"] = get_upside(p)
+
+    # Select Absolute Picks (Top 5 High Growth Potential)
+    absolute_candidates = [p for p in picks if p["action"] == "BUY"]
+    absolute_candidates.sort(key=lambda x: x["growth_potential"], reverse=True)
+    
+    if len(absolute_candidates) < 5:
+        remaining = [p for p in picks if p not in absolute_candidates and p["action"] != "SELL"]
+        remaining.sort(key=lambda x: x["growth_potential"], reverse=True)
+        absolute_candidates.extend(remaining[:5 - len(absolute_candidates)])
+        
+    absolute_picks = absolute_candidates[:5]
     
     return {
         "picks": picks,
+        "absolute_picks": absolute_picks,
         "cached": False,
-        "valid_until": get_validity_expiry_ist().isoformat(),
+        "valid_until": current_session_expiry.isoformat(),
         "generated_at": datetime.now(ist).isoformat()
     }
 
@@ -628,6 +742,39 @@ async def get_exit_tracker(db: Session = Depends(get_db)):
     }
 
 
+    return expiry
+
+
+def get_last_trading_close_ist() -> datetime:
+    """
+    Get the timestamp of the LAST Trading Session Close (15:30 IST).
+    Used as the start time for scanning news/signals for the current session.
+    
+    Examples:
+    - If Now is Tue 09:00 -> Returns Mon 15:30
+    - If Now is Mon 09:00 -> Returns Fri 15:30 (skips Sun/Sat)
+    - If Now is Fri 20:00 -> Returns Fri 15:30
+    """
+    import pytz
+    ist = pytz.timezone('Asia/Kolkata')
+    now_ist = datetime.now(ist)
+    
+    # Candidate: Today 15:30
+    candidate = now_ist.replace(hour=15, minute=30, second=0, microsecond=0)
+    
+    # If currently before 15:30, the last close was Yesterday
+    if now_ist < candidate:
+        candidate -= timedelta(days=1)
+        
+    # Skip weekends (if candidate lands on Sat/Sun/etc, go back)
+    # If candidate is Sat (5) -> Friday (4) (minus 1 day)
+    # If candidate is Sun (6) -> Friday (4) (minus 2 days)
+    while candidate.weekday() >= 5:  # Saturday=5, Sunday=6
+        candidate -= timedelta(days=1)
+        
+    return candidate
+
+
 async def generate_allstar_picks(db: Session) -> list:
     """Generate fresh All Star picks from news and telegram analysis.
     
@@ -640,12 +787,16 @@ async def generate_allstar_picks(db: Session) -> list:
     
     ist = pytz.timezone('Asia/Kolkata')
     now = datetime.now(ist)
-    valid_until = get_validity_expiry_ist()
-    day_ago = now - timedelta(hours=24)
     
-    # Step 1: Fetch recent data
-    news = db.query(MarketNews).filter(MarketNews.created_at >= day_ago).all()
-    messages = db.query(TelegramMessage).filter(TelegramMessage.created_at >= day_ago).all()
+    # Use the new robust timing logic
+    valid_until = get_trading_session_expiry_ist()
+    
+    # Analysis Start: Last Market Close (e.g. Fri 3:30 PM for Mon morning)
+    analysis_start_time = get_last_trading_close_ist()
+    
+    # Step 1: Fetch recent data since last session close
+    news = db.query(MarketNews).filter(MarketNews.created_at >= analysis_start_time).all()
+    messages = db.query(TelegramMessage).filter(TelegramMessage.created_at >= analysis_start_time).all()
     
     # Step 2: Aggregate stock mentions and sentiments
     stock_data = _aggregate_stock_mentions(news, messages, analyzer)
@@ -1115,6 +1266,7 @@ def get_time_range(shortcut: str) -> tuple:
         "last_day": (now - timedelta(days=1), now),
         "last_week": (now - timedelta(weeks=1), now),
         "last_month": (now - timedelta(days=30), now),
+        "all": (now - timedelta(days=365), now),  # Last year - effectively "all"
     }
     
     return shortcuts.get(shortcut, (now - timedelta(days=1), now))
@@ -1360,23 +1512,34 @@ async def analyze_data(
     shortcut: Optional[str] = None
 ):
     """Analyze messages and news for a time period and generate recommendations"""
-    
-    if shortcut:
-        start_date, end_date = get_time_range(shortcut)
-    elif not start_date or not end_date:
-        start_date, end_date = get_time_range("last_week")
-    
-    # Run analysis
-    analysis_result = await analyzer.analyze_timeframe(start_date, end_date)
-    
-    # Generate recommendations
-    recommendations = await analyzer.generate_all_recommendations(analysis_result)
-    
-    return {
-        "analysis": analysis_result,
-        "recommendations": recommendations,
-        "timeframes": ["next_day", "next_week", "next_month", "1yr", "2yr", "5yr", "10yr"]
-    }
+    try:
+        if shortcut:
+            start_date, end_date = get_time_range(shortcut)
+        elif not start_date or not end_date:
+            start_date, end_date = get_time_range("last_week")
+        
+        # Ensure naive comparison for SQLite stability (Fix for "can't compare offset-naive and offset-aware datetimes")
+        if start_date and start_date.tzinfo:
+            start_date = start_date.replace(tzinfo=None)
+        if end_date and end_date.tzinfo:
+            end_date = end_date.replace(tzinfo=None)
+        
+        # Run analysis
+        analysis_result = await analyzer.analyze_timeframe(start_date, end_date)
+        
+        # Generate recommendations
+        recommendations = await analyzer.generate_all_recommendations(analysis_result)
+        
+        return {
+            "analysis": analysis_result,
+            "recommendations": recommendations,
+            "timeframes": ["next_day", "next_week", "next_month", "1yr", "2yr", "5yr", "10yr"]
+        }
+    except Exception as e:
+        logger.error(f"Analysis failed: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
 
 @app.get("/api/recommendations")
 async def get_recommendations(
@@ -1407,7 +1570,7 @@ async def get_recommendations(
         })
     
     return {
-        "timeframes": ["next_day", "next_week", "next_month", "1yr", "2yr", "5yr", "10yr"],
+        "timeframes": ["next_day", "next_week", "next_month", "1yr"],
         "recommendations": grouped
     }
 
@@ -1682,10 +1845,8 @@ async def get_dashboard_stats(shortcut: Optional[str] = "today", db: Session = D
     
     active_sources = db.query(Source).filter(Source.active == True).count()
     
-    total_recommendations = db.query(Recommendation).filter(
-        Recommendation.created_at >= start_date,
-        Recommendation.created_at <= end_date
-    ).count()
+    # Global count for recommendations (limited to 50)
+    total_recommendations = db.query(Recommendation).count()
     
     # Get telegram status
     tg_authorized = await monitor.is_authorized()
@@ -2245,17 +2406,31 @@ async def get_research_data(symbol: str, db: Session = Depends(get_db)):
     # Get stock info from NSE_STOCKS list
     nse_stock_info = next((s for s in NSE_STOCKS if s["symbol"] == symbol), None)
     
+    # Try to fetch live fundamentals from Yahoo Finance for additional data
+    live_fundamentals = None
+    try:
+        live_fundamentals = await stock_api.get_live_fundamentals(symbol)
+    except Exception as e:
+        logger.debug(f"Could not fetch live fundamentals for {symbol}: {e}")
+    
     # Get expert recommendation
     from .screener import STOCK_DATA
-    fundamentals = STOCK_DATA.get(symbol, {
-        "pe": stock_quote.get("pe_ratio", 0) if stock_quote else 0,
-        "pb": stock_quote.get("pb_ratio", 0) if stock_quote else 0,
-        "roe": 15,  # Default estimate
-        "roce": 18,
-        "de": 0.5,
-        "div_yield": 1.0,
-        "mcap": "Large Cap"
-    })
+    fundamentals = STOCK_DATA.get(symbol)
+    
+    if not fundamentals:
+        # Use live fundamentals if available, else defaults
+        if live_fundamentals:
+            fundamentals = live_fundamentals
+        else:
+            fundamentals = {
+                "pe": stock_quote.get("pe_ratio", 0) if stock_quote else 0,
+                "pb": stock_quote.get("pb_ratio", 0) if stock_quote else 0,
+                "roe": 15,  # Default estimate
+                "roce": 18,
+                "de": 0.5,
+                "div_yield": 1.0,
+                "mcap": "Large Cap"
+            }
     
     # Get sentiment from news
     now = datetime.now()
@@ -2290,14 +2465,47 @@ async def get_research_data(symbol: str, db: Session = Depends(get_db)):
     if stock_quote:
         formatted_stock_info = stock_quote.copy()
         formatted_stock_info["current_price"] = stock_quote.get("price")
-        # Add additional stats if available
-        if "52w_high" not in formatted_stock_info:
+        
+        # Try to get additional data from live fundamentals or Yahoo Finance direct API
+        try:
+            import httpx
+            yf_url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}.NS"
+            async with httpx.AsyncClient(timeout=10) as client:
+                response = await client.get(yf_url, headers={'User-Agent': 'Mozilla/5.0'})
+                if response.status_code == 200:
+                    data = response.json()
+                    result = data.get('chart', {}).get('result', [{}])
+                    if result:
+                        meta = result[0].get('meta', {})
+                        # Update with Yahoo Finance data
+                        if not formatted_stock_info.get("52w_high"):
+                            formatted_stock_info["52w_high"] = meta.get("fiftyTwoWeekHigh")
+                        if not formatted_stock_info.get("52w_low"):
+                            formatted_stock_info["52w_low"] = meta.get("fiftyTwoWeekLow")
+                        # Get PE and PB from summary if available
+                        if live_fundamentals:
+                            formatted_stock_info["pe_ratio"] = live_fundamentals.get("pe", 0)
+                            formatted_stock_info["pb_ratio"] = live_fundamentals.get("pb", 0)
+                            if not formatted_stock_info.get("market_cap"):
+                                # Estimate market cap from mcap category
+                                mcap_cat = live_fundamentals.get("mcap", "Mid Cap")
+                                if mcap_cat == "Large Cap":
+                                    formatted_stock_info["market_cap"] = 100000  # 100K Cr placeholder
+                                elif mcap_cat == "Mid Cap":
+                                    formatted_stock_info["market_cap"] = 20000
+                                else:
+                                    formatted_stock_info["market_cap"] = 5000
+        except Exception as e:
+            logger.debug(f"Could not fetch additional Yahoo data for {symbol}: {e}")
+        
+        # Fallback mappings
+        if not formatted_stock_info.get("52w_high"):
             formatted_stock_info["52w_high"] = stock_quote.get("yearHigh") or stock_quote.get("52w_high")
-        if "52w_low" not in formatted_stock_info:
+        if not formatted_stock_info.get("52w_low"):
             formatted_stock_info["52w_low"] = stock_quote.get("yearLow") or stock_quote.get("52w_low")
-        if "market_cap" not in formatted_stock_info:
+        if not formatted_stock_info.get("market_cap"):
             formatted_stock_info["market_cap"] = stock_quote.get("marketCap") or stock_quote.get("market_cap")
-        if "volume" not in formatted_stock_info:
+        if not formatted_stock_info.get("volume"):
             formatted_stock_info["volume"] = stock_quote.get("volume")
 
     # Get price history for chart (last 30 days)
@@ -2438,13 +2646,17 @@ async def get_supported_stocks(db: Session = Depends(get_db)):
 
 @app.get("/api/system/status")
 async def get_system_status(db: Session = Depends(get_db)):
-    """Get status of system monitoring and AI features"""
+    """Get status of system monitoring, AI features, and market status"""
+    from .trading_hours import get_market_status
+    
     sys_mon = db.query(Config).filter(Config.key == "system_monitoring_enabled").first()
     ai_feat = db.query(Config).filter(Config.key == "ai_features_enabled").first()
+    market = get_market_status()
     
     return {
         "system_monitoring": sys_mon.value == "true" if sys_mon else True,
-        "ai_features": ai_feat.value == "true" if ai_feat else False  # Default to False if not set
+        "ai_features": ai_feat.value == "true" if ai_feat else False,
+        "market": market
     }
 
 @app.post("/api/system/control")

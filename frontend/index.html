@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Stock Market Dashboard</title>
     <meta name="description" content="Real-time stock signal analyzer with Telegram monitoring and BSE/NSE correlation">
-    <link rel="stylesheet" href="/static/styles.css">
+    <link rel="stylesheet" href="/static/styles.css?v=5">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap"
         rel="stylesheet">
@@ -44,10 +44,7 @@
                     <span class="nav-icon">📰</span>
                     Market News
                 </a>
-                <a href="#" class="nav-item" data-section="recommendations">
-                    <span class="nav-icon">🎯</span>
-                    Recommendations
-                </a>
+
                 <div class="nav-item" data-section="research">
                     <span class="material-icons nav-icon-material">science</span>
                     <span>Research Console</span>
@@ -142,6 +139,23 @@
 
             <!-- Dashboard Section -->
             <section class="section" id="dashboard-section">
+                <!-- 🚀 Absolute Picks - High Growth Potential -->
+                <div class="absolute-section" id="absoluteSection">
+                    <div class="section-header">
+                        <div class="header-main-group">
+                            <h3 class="absolute-title">🚀 Absolute Picks - High Growth Potential</h3>
+                            <button class="btn btn-icon-round refresh-btn" onclick="refreshCurrentSection()">🔄</button>
+                        </div>
+                    </div>
+                    <div class="absolute-container">
+                        <div class="absolute-picks" id="absolutePicks">
+                            <div class="empty-state"><span class="loading"></span>
+                                <p>Analyzing high potential stocks...</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- ⭐ All Star Picks - Top 10 for Next Day -->
                 <div class="allstar-section" id="allstarSection">
                     <div class="section-header">
@@ -265,9 +279,7 @@
                         <button class="timeframe-tab" data-tf="next_week">Next Week</button>
                         <button class="timeframe-tab" data-tf="next_month">Next Month</button>
                         <button class="timeframe-tab" data-tf="1yr">1 Year</button>
-                        <button class="timeframe-tab" data-tf="2yr">2 Years</button>
-                        <button class="timeframe-tab" data-tf="5yr">5 Years</button>
-                        <button class="timeframe-tab" data-tf="10yr">10 Years</button>
+                        <button class="timeframe-tab" data-tf="1yr">1 Year</button>
                     </div>
                     <div class="recommendations-grid" id="recommendationsGrid">
                         <div class="empty-state">
@@ -368,16 +380,11 @@
                     </div>
                     <div class="header-filter-group">
                         <div class="time-shortcuts">
-                            <button class="shortcut-btn" data-shortcut="last_hour">Hr</button>
+                            <button class="shortcut-btn" data-shortcut="last_hour">1H</button>
                             <button class="shortcut-btn" data-shortcut="today">Today</button>
-                            <button class="shortcut-btn active" data-shortcut="last_day">24h</button>
-                            <button class="shortcut-btn" data-shortcut="last_week">Wk</button>
-                            <button class="shortcut-btn" data-shortcut="last_month">Mo</button>
-                        </div>
-                        <div class="date-range">
-                            <input type="datetime-local" id="startDate" class="date-input-flat" placeholder="From">
-                            <input type="datetime-local" id="endDate" class="date-input-flat" placeholder="To">
-                            <button class="btn btn-sm btn-primary applyDateRange">Apply</button>
+                            <button class="shortcut-btn active" data-shortcut="last_day">24H</button>
+                            <button class="shortcut-btn" data-shortcut="last_week">Week</button>
+                            <button class="shortcut-btn" data-shortcut="all">All</button>
                         </div>
                     </div>
                 </div>
@@ -399,15 +406,11 @@
                     </div>
                     <div class="header-filter-group">
                         <div class="time-shortcuts">
-                            <button class="shortcut-btn" data-shortcut="last_hour">Hr</button>
+                            <button class="shortcut-btn" data-shortcut="last_hour">1H</button>
                             <button class="shortcut-btn" data-shortcut="today">Today</button>
-                            <button class="shortcut-btn active" data-shortcut="last_day">24h</button>
-                            <button class="shortcut-btn" data-shortcut="last_week">Wk</button>
-                        </div>
-                        <div class="date-range">
-                            <input type="datetime-local" id="startDateNews" class="date-input-flat" placeholder="From">
-                            <input type="datetime-local" id="endDateNews" class="date-input-flat" placeholder="To">
-                            <button class="btn btn-sm btn-primary applyDateRange">Apply</button>
+                            <button class="shortcut-btn active" data-shortcut="last_day">24H</button>
+                            <button class="shortcut-btn" data-shortcut="last_week">Week</button>
+                            <button class="shortcut-btn" data-shortcut="all">All</button>
                         </div>
                     </div>
                 </div>
@@ -419,52 +422,7 @@
                 </div>
             </section>
 
-            <!-- Recommendations Section -->
-            <section class="section hidden" id="recommendations-section">
-                <div class="section-header" style="margin-bottom: 12px;">
-                    <div class="header-main-group">
-                        <h3>📊 Analysis & Recommendations</h3>
-                        <button class="btn btn-icon-round refresh-btn" onclick="refreshCurrentSection()">🔄</button>
-                    </div>
-                </div>
-                <div class="disclaimer">
-                    ⚠️ <strong>Disclaimer:</strong> These recommendations are generated by AI analysis of market signals
-                    and news. This is NOT financial advice. Always do your own research before investing.
-                </div>
 
-                <div class="recommendations-full">
-                    <div class="timeframe-cards">
-                        <div class="tf-card" id="tf-next_day">
-                            <h4>📅 Next Day</h4>
-                            <div class="tf-recs"></div>
-                        </div>
-                        <div class="tf-card" id="tf-next_week">
-                            <h4>📆 Next Week</h4>
-                            <div class="tf-recs"></div>
-                        </div>
-                        <div class="tf-card" id="tf-next_month">
-                            <h4>🗓️ Next Month</h4>
-                            <div class="tf-recs"></div>
-                        </div>
-                        <div class="tf-card" id="tf-1yr">
-                            <h4>📊 1 Year</h4>
-                            <div class="tf-recs"></div>
-                        </div>
-                        <div class="tf-card" id="tf-2yr">
-                            <h4>📈 2 Years</h4>
-                            <div class="tf-recs"></div>
-                        </div>
-                        <div class="tf-card" id="tf-5yr">
-                            <h4>🚀 5 Years</h4>
-                            <div class="tf-recs"></div>
-                        </div>
-                        <div class="tf-card" id="tf-10yr">
-                            <h4>🌟 10 Years</h4>
-                            <div class="tf-recs"></div>
-                        </div>
-                    </div>
-                </div>
-            </section>
 
             <!-- All Star Picks Section (Dedicated Page) -->
             <section class="section hidden" id="allstar-section">

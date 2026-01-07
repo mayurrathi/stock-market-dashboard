@@ -14,41 +14,142 @@ import pandas as pd
 import numpy as np
 from typing import Dict, Optional
 import logging
+import time
 
 logger = logging.getLogger(__name__)
 
+# Import fallback data from stock_api
+try:
+    from ..stock_api import STOCK_DATA, NSE_STOCKS
+except ImportError:
+    STOCK_DATA = {}
+    NSE_STOCKS = []
 
-def fetch_fundamentals(symbol: str) -> Dict:
+# Import trading hours utility
+try:
+    from ..trading_hours import should_use_realtime_data, get_market_status
+except ImportError:
+    def should_use_realtime_data():
+        return True  # Default to real-time if import fails
+    def get_market_status():
+        return {"use_realtime": True}
+
+
+def fetch_fundamentals(symbol: str, use_fallback: bool = True) -> Dict:
     """
     Fetch fundamental data from Yahoo Finance.
     Returns P/E, P/B, ROE, Debt/Equity, and other key metrics.
-    """
-    if not symbol.endswith('.NS') and not symbol.endswith('.BO'):
-        symbol = f"{symbol}.NS"
     
-    try:
-        ticker = yf.Ticker(symbol)
-        info = ticker.info
+    During market hours: Always tries real-time data first
+    Outside market hours: Uses cached data if available (market is closed)
+    
+    Falls back to cached STOCK_DATA only when:
+    - Outside trading hours, OR
+    - Real-time API fails during trading hours
+    """
+    clean_symbol = symbol.replace('.NS', '').replace('.BO', '').upper()
+    yf_symbol = f"{clean_symbol}.NS"
+    
+    # Check if we should prioritize real-time data
+    use_realtime = should_use_realtime_data()
+    market_status = get_market_status()
+    
+    # During market hours, always try real-time first
+    # Outside market hours, try cached data first if available
+    if not use_realtime and use_fallback and clean_symbol in STOCK_DATA:
+        logger.info(f"Market closed - using cached data for {clean_symbol}")
+        cached = STOCK_DATA[clean_symbol]
+        stock_info = next((s for s in NSE_STOCKS if s["symbol"] == clean_symbol), {})
         
         return {
-            "pe_ratio": info.get("trailingPE", 0) or info.get("forwardPE", 0) or 0,
-            "pb_ratio": info.get("priceToBook", 0) or 0,
-            "roe": (info.get("returnOnEquity", 0) or 0) * 100,  # Convert to percentage
-            "debt_to_equity": info.get("debtToEquity", 0) or 0,
-            "current_price": info.get("currentPrice", 0) or info.get("regularMarketPrice", 0) or 0,
-            "dividend_yield": (info.get("dividendYield", 0) or 0) * 100,
-            "market_cap": info.get("marketCap", 0) or 0,
-            "52w_high": info.get("fiftyTwoWeekHigh", 0) or 0,
-            "52w_low": info.get("fiftyTwoWeekLow", 0) or 0,
-            "revenue_growth": (info.get("revenueGrowth", 0) or 0) * 100,
-            "profit_margin": (info.get("profitMargins", 0) or 0) * 100,
-            "name": info.get("shortName", symbol),
-            "sector": info.get("sector", "Unknown"),
-            "industry": info.get("industry", "Unknown")
+            "pe_ratio": cached.get("pe", 0),
+            "pb_ratio": cached.get("pb", 0),
+            "roe": cached.get("roe", 0),
+            "debt_to_equity": cached.get("de", 0),
+            "profit_margin": cached.get("roe", 0) * 0.5,
+            "current_price": 0,
+            "dividend_yield": cached.get("div_yield", 0),
+            "market_cap": 500000000000 if cached.get("mcap") == "Large Cap" else 100000000000,
+            "52w_high": 0,
+            "52w_low": 0,
+            "revenue_growth": 0,
+            "name": stock_info.get("name", clean_symbol),
+            "sector": stock_info.get("sector", "Unknown"),
+            "industry": stock_info.get("sector", "Unknown"),
+            "data_source": "cached_data",
+            "market_status": market_status.get("status", "Closed")
         }
-    except Exception as e:
-        logger.error(f"Failed to fetch fundamentals for {symbol}: {e}")
-        return {}
+    
+    # Try Yahoo Finance with retry logic (real-time data)
+    max_retries = 3 if use_realtime else 2  # More retries during market hours
+    for attempt in range(max_retries):
+        try:
+            ticker = yf.Ticker(yf_symbol)
+            info = ticker.info
+            
+            # Check if we got valid data (not just error response)
+            if info and (info.get("shortName") or info.get("symbol")):
+                return {
+                    "pe_ratio": info.get("trailingPE", 0) or info.get("forwardPE", 0) or 0,
+                    "pb_ratio": info.get("priceToBook", 0) or 0,
+                    "roe": (info.get("returnOnEquity", 0) or 0) * 100,
+                    "debt_to_equity": info.get("debtToEquity", 0) or 0,
+                    "current_price": info.get("currentPrice", 0) or info.get("regularMarketPrice", 0) or 0,
+                    "dividend_yield": (info.get("dividendYield", 0) or 0) * 100,
+                    "market_cap": info.get("marketCap", 0) or 0,
+                    "52w_high": info.get("fiftyTwoWeekHigh", 0) or 0,
+                    "52w_low": info.get("fiftyTwoWeekLow", 0) or 0,
+                    "revenue_growth": (info.get("revenueGrowth", 0) or 0) * 100,
+                    "profit_margin": (info.get("profitMargins", 0) or 0) * 100,
+                    "name": info.get("shortName", clean_symbol),
+                    "sector": info.get("sector", "Unknown"),
+                    "industry": info.get("industry", "Unknown"),
+                    "data_source": "realtime",
+                    "market_status": market_status.get("status", "Unknown")
+                }
+            else:
+                logger.warning(f"Yahoo Finance returned empty/invalid info for {yf_symbol}")
+                
+        except Exception as e:
+            error_msg = str(e).lower()
+            # Check for rate limiting (429 error)
+            if "429" in str(e) or "too many requests" in error_msg or "rate" in error_msg:
+                logger.warning(f"Yahoo Finance rate limited ({attempt+1}/{max_retries}): {e}")
+                if attempt < max_retries - 1:
+                    time.sleep(1.5 if use_realtime else 1)  # Longer wait during market hours
+                    continue
+            else:
+                logger.error(f"Failed to fetch fundamentals for {yf_symbol}: {e}")
+            break
+    
+    # Fallback to cached STOCK_DATA if Yahoo Finance failed
+    if use_fallback and clean_symbol in STOCK_DATA:
+        logger.info(f"Using cached STOCK_DATA for {clean_symbol} (Real-time API unavailable)")
+        cached = STOCK_DATA[clean_symbol]
+        stock_info = next((s for s in NSE_STOCKS if s["symbol"] == clean_symbol), {})
+        
+        return {
+            "pe_ratio": cached.get("pe", 0),
+            "pb_ratio": cached.get("pb", 0),
+            "roe": cached.get("roe", 0),
+            "debt_to_equity": cached.get("de", 0),
+            "profit_margin": cached.get("roe", 0) * 0.5,
+            "current_price": 0,
+            "dividend_yield": cached.get("div_yield", 0),
+            "market_cap": 500000000000 if cached.get("mcap") == "Large Cap" else 100000000000,
+            "52w_high": 0,
+            "52w_low": 0,
+            "revenue_growth": 0,
+            "name": stock_info.get("name", clean_symbol),
+            "sector": stock_info.get("sector", "Unknown"),
+            "industry": stock_info.get("sector", "Unknown"),
+            "data_source": "cached_data",
+            "market_status": market_status.get("status", "Unknown")
+        }
+    
+    logger.warning(f"No data available for {clean_symbol} - not found in cache either")
+    return {}
+
 
 
 def calculate_quality_score(roe: float, debt_to_equity: float, profit_margin: float = 0) -> Dict:
@@ -369,11 +470,17 @@ def analyze_qvm(symbol: str) -> Dict:
     Complete QVM analysis for a stock.
     Returns Quality, Valuation, Momentum scores and composite Investability Score.
     """
-    # Fetch fundamentals
-    fundamentals = fetch_fundamentals(symbol)
+    clean_symbol = symbol.replace('.NS', '').replace('.BO', '').upper()
+    
+    # Fetch fundamentals (with fallback to cached data)
+    fundamentals = fetch_fundamentals(clean_symbol)
     
     if not fundamentals:
-        return {"error": f"No data available for {symbol}"}
+        # Provide more helpful error message
+        supported_symbols = list(STOCK_DATA.keys())[:10]
+        return {
+            "error": f"No data available for {clean_symbol}. This may be due to API rate limiting. Try one of these supported stocks: {', '.join(supported_symbols)}"
+        }
     
     # Calculate individual scores
     quality = calculate_quality_score(
@@ -388,14 +495,15 @@ def analyze_qvm(symbol: str) -> Dict:
         sector=fundamentals.get("sector", "Unknown")
     )
     
-    momentum = calculate_momentum_score(symbol)
+    momentum = calculate_momentum_score(clean_symbol)
     
     # Calculate composite score
     investability = calculate_investability_score(quality, valuation, momentum)
     
-    return {
-        "symbol": symbol.replace('.NS', '').replace('.BO', ''),
-        "name": fundamentals.get("name", symbol),
+    # Build response
+    response = {
+        "symbol": clean_symbol,
+        "name": fundamentals.get("name", clean_symbol),
         "sector": fundamentals.get("sector", "Unknown"),
         "industry": fundamentals.get("industry", "Unknown"),
         "fundamentals": fundamentals,
@@ -410,3 +518,10 @@ def analyze_qvm(symbol: str) -> Dict:
         },
         "summary": f"Investability Score: {investability['score']}/100 ({investability['recommendation']})"
     }
+    
+    # Add data source info
+    data_source = fundamentals.get("data_source", "unknown")
+    if data_source == "cached_data":
+        response["data_note"] = "⚠️ Using cached data (Yahoo Finance temporarily unavailable). Values may not be real-time."
+    
+    return response

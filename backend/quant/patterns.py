@@ -14,26 +14,99 @@ import numpy as np
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple
 import logging
+import time
+import httpx
 
 logger = logging.getLogger(__name__)
+
+# Import trading hours utility
+try:
+    from ..trading_hours import should_use_realtime_data, get_market_status
+except ImportError:
+    def should_use_realtime_data():
+        return True
+    def get_market_status():
+        return {"use_realtime": True}
 
 
 def fetch_stock_data(symbol: str, period: str = "1y") -> pd.DataFrame:
     """
     Fetch OHLCV data for a stock from Yahoo Finance.
     For Indian stocks, appends .NS suffix if not present.
+    Includes retry logic and fallback to direct API on rate-limit.
     """
-    if not symbol.endswith('.NS') and not symbol.endswith('.BO'):
-        symbol = f"{symbol}.NS"
+    clean_symbol = symbol.replace('.NS', '').replace('.BO', '').upper()
+    yf_symbol = f"{clean_symbol}.NS"
     
+    # Period mapping for direct API
+    period_map = {
+        "1y": "1y",
+        "6mo": "6mo",
+        "3mo": "3mo",
+        "1mo": "1mo"
+    }
+    
+    # Try yfinance with retry
+    max_retries = 2
+    for attempt in range(max_retries):
+        try:
+            ticker = yf.Ticker(yf_symbol)
+            df = ticker.history(period=period)
+            if not df.empty:
+                df.index = pd.to_datetime(df.index)
+                return df
+        except Exception as e:
+            error_msg = str(e).lower()
+            if "429" in str(e) or "too many requests" in error_msg:
+                logger.warning(f"Yahoo Finance rate limited ({attempt+1}/{max_retries})")
+                if attempt < max_retries - 1:
+                    time.sleep(1)
+                    continue
+            else:
+                logger.error(f"Failed to fetch data for {yf_symbol}: {e}")
+            break
+    
+    # Fallback: Try direct Yahoo Finance API via httpx
+    logger.info(f"Trying direct Yahoo Finance API for {clean_symbol}")
     try:
-        ticker = yf.Ticker(symbol)
-        df = ticker.history(period=period)
-        df.index = pd.to_datetime(df.index)
-        return df
+        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{yf_symbol}?range={period_map.get(period, '1y')}&interval=1d"
+        with httpx.Client(timeout=15) as client:
+            response = client.get(url, headers={'User-Agent': 'Mozilla/5.0'})
+            
+            if response.status_code == 200:
+                data = response.json()
+                result = data.get('chart', {}).get('result', [])
+                
+                if result:
+                    result = result[0]
+                    timestamps = result.get('timestamp', [])
+                    indicators = result.get('indicators', {}).get('quote', [{}])[0]
+                    
+                    if timestamps and indicators:
+                        df = pd.DataFrame({
+                            'Open': indicators.get('open', []),
+                            'High': indicators.get('high', []),
+                            'Low': indicators.get('low', []),
+                            'Close': indicators.get('close', []),
+                            'Volume': indicators.get('volume', [])
+                        }, index=pd.to_datetime(timestamps, unit='s'))
+                        
+                        # Remove rows with NaN close prices
+                        df = df.dropna(subset=['Close'])
+                        
+                        if not df.empty:
+                            logger.info(f"Successfully fetched {len(df)} rows via direct API for {clean_symbol}")
+                            return df
+            elif response.status_code == 429:
+                logger.warning(f"Direct API also rate limited for {clean_symbol}")
+            else:
+                logger.warning(f"Direct API returned status {response.status_code} for {clean_symbol}")
+                
     except Exception as e:
-        logger.error(f"Failed to fetch data for {symbol}: {e}")
-        return pd.DataFrame()
+        logger.error(f"Direct API fallback failed for {clean_symbol}: {e}")
+    
+    logger.warning(f"All attempts failed to fetch data for {clean_symbol}")
+    return pd.DataFrame()
 
 
 def calculate_relative_strength(symbol: str, benchmark: str = "^NSEI", period: int = 50) -> Dict:

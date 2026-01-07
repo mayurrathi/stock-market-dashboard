@@ -21,6 +21,7 @@ document.addEventListener('DOMContentLoaded', () => {
     loadAllStarPicks();  // Load All Star section
     loadRecommendations();
     checkTelegramStatus();
+    refreshWatchlistCache();  // Initialize watchlist cache for toggle buttons
 
     setupNavigation();
     setupTimeShortcuts();
@@ -633,6 +634,34 @@ async function loadAllStarPicks() {
 
                 // User requested relevant INT time info
                 timer.textContent = `Analysis: ${dayStr} • ${timeStr} IST`;
+            }
+
+            // Render Absolute Picks (New Section)
+            if (data.absolute_picks && data.absolute_picks.length > 0) {
+                const absContainer = document.getElementById('absolutePicks');
+                if (absContainer) {
+                    absContainer.innerHTML = data.absolute_picks.map((pick, index) => `
+                        <div class="absolute-card" data-symbol="${pick.symbol}" style="cursor: pointer;">
+                            <div class="absolute-badge">Rank #${index + 1}</div>
+                            <div class="absolute-header">
+                                <div class="absolute-symbol">${pick.symbol}</div>
+                                <div class="absolute-price">₹${pick.current_price ? pick.current_price.toLocaleString('en-IN') : '--'}</div>
+                            </div>
+                            <div class="absolute-action-row">
+                                <div class="absolute-action ${pick.action.toLowerCase()}">${pick.action}</div>
+                                <div class="absolute-confidence">${Math.round(pick.confidence)}% Growth Potential</div>
+                            </div>
+                            <div class="absolute-targets">
+                                ${pick.target_price ? `<div class="target-val">Target: ₹${pick.target_price.toLocaleString('en-IN')}</div>` : ''}
+                                ${pick.stop_loss ? `<div class="sl-val">SL: ₹${pick.stop_loss.toLocaleString('en-IN')}</div>` : ''}
+                            </div>
+                            <div class="absolute-reason">${pick.reasoning || 'High conviction setup detected.'}</div>
+                        </div>
+                    `).join('');
+                }
+            } else {
+                const absContainer = document.getElementById('absolutePicks');
+                if (absContainer) absContainer.innerHTML = '<div class="empty-state"><span>🚀</span><p>No Absolute Picks found.</p></div>';
             }
 
             container.innerHTML = data.picks.map((pick, index) => `
@@ -2174,13 +2203,28 @@ async function removeFromWatchlist(symbol) {
 
     try {
         await apiCall(`/api/watchlist/${symbol}`, { method: 'DELETE' });
+        watchlistCache.delete(symbol.toUpperCase());
+        showToast(`${symbol} removed from watchlist`, 'success', 4000);
         loadWatchlist();
     } catch (error) {
-        alert('Failed to remove: ' + error.message);
+        showToast('Failed to remove: ' + error.message, 'error', 5000);
     }
 }
 
-async function quickAddToWatchlist(symbol, event) {
+// Cache for watchlist status - refreshed on load
+let watchlistCache = new Set();
+
+async function refreshWatchlistCache() {
+    try {
+        const data = await apiCall('/api/watchlist');
+        watchlistCache = new Set((data.stocks || []).map(s => s.symbol.toUpperCase()));
+    } catch (error) {
+        console.error('Failed to refresh watchlist cache:', error);
+    }
+}
+
+// Toggle watchlist - add or remove based on current state
+async function toggleWatchlist(symbol, event) {
     // Prevent card click from triggering
     if (event) {
         event.stopPropagation();
@@ -2188,34 +2232,61 @@ async function quickAddToWatchlist(symbol, event) {
     }
 
     const btn = event ? event.currentTarget : null;
+    const upperSymbol = symbol.toUpperCase();
+    const isInWatchlist = watchlistCache.has(upperSymbol);
+
     if (btn) {
         btn.disabled = true;
         btn.innerHTML = '⏳';
     }
 
     try {
-        await apiCall('/api/watchlist', {
-            method: 'POST',
-            body: JSON.stringify({ symbol: symbol.toUpperCase() })
-        });
+        if (isInWatchlist) {
+            // Remove from watchlist
+            await apiCall(`/api/watchlist/${upperSymbol}`, { method: 'DELETE' });
+            watchlistCache.delete(upperSymbol);
 
-        if (btn) {
-            btn.innerHTML = '✓';
-            btn.style.background = '#10b981';
-            btn.title = 'Added!';
+            if (btn) {
+                btn.innerHTML = '⭐';
+                btn.style.background = 'rgba(255,255,255,0.1)';
+                btn.title = 'Add to Watchlist';
+            }
+            showToast(`${upperSymbol} removed from watchlist`, 'info', 3000);
+        } else {
+            // Add to watchlist
+            await apiCall('/api/watchlist', {
+                method: 'POST',
+                body: JSON.stringify({ symbol: upperSymbol })
+            });
+            watchlistCache.add(upperSymbol);
+
+            if (btn) {
+                btn.innerHTML = '✓';
+                btn.style.background = '#10b981';
+                btn.title = 'In Watchlist - Click to remove';
+            }
+            showToast(`${upperSymbol} added to watchlist`, 'success', 3000);
         }
 
-        // Refresh watchlist if visible
+        // Refresh watchlist page if visible
         if (currentSection === 'watchlist') {
             loadWatchlist();
         }
     } catch (error) {
         if (btn) {
-            btn.innerHTML = '⭐';
+            btn.innerHTML = isInWatchlist ? '✓' : '⭐';
             btn.disabled = false;
         }
-        console.error('Failed to add to watchlist:', error);
+        console.error('Watchlist toggle failed:', error);
+        showToast('Failed: ' + error.message, 'error');
+    } finally {
+        if (btn) btn.disabled = false;
     }
+}
+
+// Legacy alias for backwards compatibility
+async function quickAddToWatchlist(symbol, event) {
+    return toggleWatchlist(symbol, event);
 }
 
 // Setup watchlist modal handlers
@@ -2363,8 +2434,32 @@ async function triggerMarketAnalysis() {
     try {
         showToast('Running comprehensive market analysis...', 'info');
         const result = await apiCall('/api/market/analyze', { method: 'POST' });
-        showToast(result.message || 'Market analysis complete!', 'success');
+
+        // Show detailed analysis results
+        const analysis = result.analysis || {};
+        const topStocks = (analysis.top_stocks || []).slice(0, 5).map(s => s[0]).join(', ');
+        const messagesAnalyzed = analysis.messages_analyzed || 0;
+        const newsAnalyzed = analysis.news_analyzed || 0;
+        const recsCount = result.recommendations_count || 0;
+
+        // Build summary message
+        let summary = `✅ Analysis Complete!<br>`;
+        summary += `📊 ${messagesAnalyzed} messages + ${newsAnalyzed} news analyzed<br>`;
+        if (topStocks) {
+            summary += `🔥 Trending: ${topStocks}<br>`;
+        }
+        summary += `💡 ${recsCount} new recommendations generated`;
+
+        showToast(summary, 'success', 8000);
+
+        // Reload the market overview to show updated data
         loadMarketOverview();
+
+        // Also refresh signals if on home page
+        if (typeof loadLiveSignals === 'function') {
+            loadLiveSignals();
+        }
+
     } catch (error) {
         console.error('Analysis failed:', error);
         showToast('Analysis failed: ' + error.message, 'error');
@@ -3576,6 +3671,7 @@ async function analyzeQvm(symbol) {
             </div>
             
             <p class="summary-text">${data.summary || ''}</p>
+            ${data.data_note ? `<p class="data-note" style="color: var(--warning); font-size: 12px; margin-top: 12px; padding: 8px; background: rgba(255,165,0,0.1); border-radius: 6px;">${data.data_note}</p>` : ''}
         </div>`;
 
         container.innerHTML = html;

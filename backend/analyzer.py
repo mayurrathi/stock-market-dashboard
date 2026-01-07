@@ -10,7 +10,7 @@ import random
 from collections import Counter
 
 from .database import SessionLocal
-from .models import TelegramMessage, MarketNews, StockPrice, Analysis, Recommendation
+from .models import TelegramMessage, MarketNews, StockPrice, Analysis, Recommendation, Stock
 from .llm import llm_service
 
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
@@ -88,7 +88,24 @@ HOLD_KEYWORDS = [
 class StockAnalyzer:
     def __init__(self):
         self.vader = SentimentIntensityAnalyzer()
+        self._valid_symbols = None
     
+    def _get_valid_symbols(self) -> set:
+        """Get set of valid stock symbols from DB"""
+        if self._valid_symbols is not None:
+            return self._valid_symbols
+        
+        db = SessionLocal()
+        try:
+            stocks = db.query(Stock.symbol).all()
+            self._valid_symbols = {s[0].upper() for s in stocks}
+            # Remove indices that shouldn't have cards
+            indices = {'NIFTY', 'BANKNIFTY', 'SENSEX', 'NIFTY50'}
+            self._valid_symbols = self._valid_symbols - indices
+            return self._valid_symbols
+        finally:
+            db.close()
+
     def extract_stocks(self, text: str) -> List[str]:
         """Extract stock symbols from text"""
         stocks = set()
@@ -98,23 +115,19 @@ class StockAnalyzer:
             matches = re.findall(pattern, text_upper)
             stocks.update(matches)
         
-        # Common company name mapping
-        company_map = {
-            'reliance': 'RELIANCE', 'tata steel': 'TATASTEEL', 'infosys': 'INFY',
-            'tcs': 'TCS', 'wipro': 'WIPRO', 'hdfc bank': 'HDFCBANK',
-            'icici bank': 'ICICIBANK', 'axis bank': 'AXISBANK', 'sbi': 'SBIN',
-            'kotak': 'KOTAKBANK', 'bharti airtel': 'BHARTIARTL', 'airtel': 'BHARTIARTL',
-            'adani': 'ADANIENT', 'maruti': 'MARUTI', 'bajaj': 'BAJFINANCE',
-            'asian paints': 'ASIANPAINT', 'hul': 'HINDUNILVR', 'l&t': 'LT',
-            'sun pharma': 'SUNPHARMA', 'tech mahindra': 'TECHM',
-        }
+        # Filter against valid symbols from DB
+        valid_symbols = self._get_valid_symbols()
+        filtered_stocks = []
+        for stock in stocks:
+            if stock in valid_symbols:
+                # Special case for IDEA - only count if it's likely the stock (usually followed by price or buy/sell)
+                if stock == 'IDEA':
+                    if any(kw in text_lower for kw in BUY_KEYWORDS + SELL_KEYWORDS + ['price', 'target', 'share']):
+                        filtered_stocks.append(stock)
+                else:
+                    filtered_stocks.append(stock)
         
-        text_lower = text.lower()
-        for company, symbol in company_map.items():
-            if company in text_lower:
-                stocks.add(symbol)
-        
-        return list(stocks)
+        return list(set(filtered_stocks))
     
     async def deep_analyze_messages(self, messages: List[TelegramMessage]) -> Dict:
         """Perform deep analysis on a collection of messages to identify trends and recommendations"""
@@ -381,8 +394,8 @@ class StockAnalyzer:
         db = SessionLocal()
         recommendations = []
         
-        # Include ALL timeframes including long-term ones
-        timeframes = ['next_day', 'next_week', 'next_month', '1yr', '2yr', '5yr', '10yr']
+        # Pruned timeframes: actionable windows only
+        timeframes = ['next_day', 'next_week', 'next_month', '1yr']
         
         try:
             # Get stocks from analysis
@@ -390,39 +403,63 @@ class StockAnalyzer:
             stock_sentiments = analysis_result.get('stock_sentiments', {})
             analysis_id = analysis_result.get('analysis_id')
             
-            # Only process stocks that actually have data
-            all_stocks = top_stocks
+            # Limit to top 5 real stocks with significant activity and valid symbols
+            valid_symbols = self._get_valid_symbols()
+            valid_stocks = [s for s in top_stocks if s in valid_symbols and stock_sentiments.get(s, {}).get('total', 0) >= 2][:5]
             
-            for symbol in all_stocks[:20]:  # Limit to top 20 real stocks
-                if symbol not in stock_sentiments:
-                    continue
-                    
+            # Get existing recommendations to avoid duplicates
+            existing_recs = db.query(Recommendation.symbol, Recommendation.timeframe, Recommendation.action).all()
+            rec_cache = {(r[0], r[1], r[2]) for r in existing_recs}
+
+            for symbol in valid_stocks:
                 sentiment_data = stock_sentiments[symbol]
                 
+                # Find the single best timeframe for this stock
+                best_rec = None
                 for timeframe in timeframes:
                     rec = self.generate_recommendation(symbol, sentiment_data, timeframe)
                     
-                    if rec:
-                        # LLM reasoning DISABLED as per user request - using template reasoning only
-                        # The template reasoning is already set in generate_recommendation()
-
-                        # Add stock category label
-                        rec['category'] = self._get_stock_category(symbol)
+                    # Only positive signals (BUY, STRONG BUY)
+                    if rec and rec['action'] in ['BUY', 'STRONG BUY']:
+                        if not best_rec or rec['confidence'] > best_rec['confidence']:
+                            best_rec = rec
+                
+                if best_rec:
+                    # Deduplication check
+                    rec_tuple = (best_rec['symbol'], best_rec['timeframe'], best_rec['action'])
+                    if rec_tuple in rec_cache:
+                        continue
                         
-                        # Save to database
-                        db_rec = Recommendation(
-                            analysis_id=analysis_id,
-                            symbol=rec['symbol'],
-                            timeframe=rec['timeframe'],
-                            action=rec['action'],
-                            confidence=rec['confidence'],
-                            reasoning=rec['reasoning']
-                        )
-                        db.add(db_rec)
-                        recommendations.append(rec)
+                    # Add stock category label
+                    best_rec['category'] = self._get_stock_category(symbol)
+                    
+                    # Save to database
+                    db_rec = Recommendation(
+                        analysis_id=analysis_id,
+                        symbol=best_rec['symbol'],
+                        timeframe=best_rec['timeframe'],
+                        action=best_rec['action'],
+                        confidence=best_rec['confidence'],
+                        reasoning=best_rec['reasoning']
+                    )
+                    db.add(db_rec)
+                    recommendations.append(best_rec)
+                    rec_cache.add(rec_tuple)
             
             db.commit()
-            logger.info(f"Generated {len(recommendations)} diverse recommendations")
+            
+            # Final step: Enforce global cap of 50 total records
+            total_count = db.query(Recommendation).count()
+            if total_count > 50:
+                # Delete oldest records to bring total back to 50
+                to_delete = total_count - 50
+                oldest_ids = db.query(Recommendation.id).order_by(Recommendation.created_at.asc()).limit(to_delete).all()
+                ids_list = [i[0] for i in oldest_ids]
+                db.query(Recommendation).filter(Recommendation.id.in_(ids_list)).delete(synchronize_session=False)
+                db.commit()
+                logger.info(f"Enforced 50-card global limit: Purged {to_delete} oldest recommendations")
+
+            logger.info(f"Generated {len(recommendations)} high-quality unique recommendations")
             
         finally:
             db.close()
