@@ -411,40 +411,52 @@ class StockAnalyzer:
             existing_recs = db.query(Recommendation.symbol, Recommendation.timeframe, Recommendation.action).all()
             rec_cache = {(r[0], r[1], r[2]) for r in existing_recs}
 
+            # Track recommendations per timeframe
+            timeframe_counts = {tf: 0 for tf in timeframes}
+            MAX_PER_TIMEFRAME = 15  # Ensure distribution across timeframes
+            
             for symbol in valid_stocks:
                 sentiment_data = stock_sentiments[symbol]
                 
-                # Find the single best timeframe for this stock
-                best_rec = None
+                # Generate recommendations for ALL timeframes where signal is positive
                 for timeframe in timeframes:
+                    # Skip if this timeframe already has enough recommendations
+                    if timeframe_counts[timeframe] >= MAX_PER_TIMEFRAME:
+                        continue
+                    
                     rec = self.generate_recommendation(symbol, sentiment_data, timeframe)
                     
                     # Only positive signals (BUY, STRONG BUY)
                     if rec and rec['action'] in ['BUY', 'STRONG BUY']:
-                        if not best_rec or rec['confidence'] > best_rec['confidence']:
-                            best_rec = rec
-                
-                if best_rec:
-                    # Deduplication check
-                    rec_tuple = (best_rec['symbol'], best_rec['timeframe'], best_rec['action'])
-                    if rec_tuple in rec_cache:
-                        continue
+                        # Deduplication check
+                        rec_tuple = (rec['symbol'], rec['timeframe'], rec['action'])
+                        if rec_tuple in rec_cache:
+                            continue
                         
-                    # Add stock category label
-                    best_rec['category'] = self._get_stock_category(symbol)
-                    
-                    # Save to database
-                    db_rec = Recommendation(
-                        analysis_id=analysis_id,
-                        symbol=best_rec['symbol'],
-                        timeframe=best_rec['timeframe'],
-                        action=best_rec['action'],
-                        confidence=best_rec['confidence'],
-                        reasoning=best_rec['reasoning']
-                    )
-                    db.add(db_rec)
-                    recommendations.append(best_rec)
-                    rec_cache.add(rec_tuple)
+                        # Add stock category label
+                        rec['category'] = self._get_stock_category(symbol)
+                        
+                        # Save to database
+                        db_rec = Recommendation(
+                            analysis_id=analysis_id,
+                            symbol=rec['symbol'],
+                            timeframe=rec['timeframe'],
+                            action=rec['action'],
+                            confidence=rec['confidence'],
+                            reasoning=rec['reasoning']
+                        )
+                        db.add(db_rec)
+                        recommendations.append(rec)
+                        rec_cache.add(rec_tuple)
+                        timeframe_counts[timeframe] += 1
+                        
+                        # Global 50 cap check
+                        if len(recommendations) >= 50:
+                            break
+                
+                # Break outer loop if we hit global cap
+                if len(recommendations) >= 50:
+                    break
             
             db.commit()
             
