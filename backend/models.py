@@ -259,13 +259,6 @@ class TaskLog(Base):
     )
 
 
-class FetchLog(Base):
-    """Log of fetch operations (news, Telegram)"""
-    __tablename__ = "fetch_logs"
-    
-    id = Column(Integer, primary_key=True, index=True)
-    source = Column(String, nullable=False)  # "telegram", "news_rss", etc.
-    items_fetched = Column(Integer, default=0)
     success = Column(Boolean, default=True)
     error_message = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)

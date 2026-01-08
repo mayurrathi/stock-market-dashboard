@@ -470,7 +470,7 @@ async def get_allstar_picks(db: Session = Depends(get_db)):
     # Helper to calculate upside
     def get_upside(p):
         if p.get("current_price") and p.get("target_price") and p["current_price"] > 0:
-        return ((p["target_price"] - p["current_price"]) / p["current_price"]) * 100
+            return ((p["target_price"] - p["current_price"]) / p["current_price"]) * 100
         return 0
 
 @app.get("/api/picks/live-performance")
