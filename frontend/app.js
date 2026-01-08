@@ -640,25 +640,50 @@ async function loadAllStarPicks() {
             if (data.absolute_picks && data.absolute_picks.length > 0) {
                 const absContainer = document.getElementById('absolutePicks');
                 if (absContainer) {
-                    absContainer.innerHTML = data.absolute_picks.map((pick, index) => `
+                    absContainer.innerHTML = data.absolute_picks.map((pick, index) => {
+                        const recommendedPrice = pick.recommended_price || pick.current_price;
+                        const currentPrice = pick.current_price || 0;
+                        const priceChange = currentPrice - recommendedPrice;
+                        const priceChangePct = recommendedPrice ? ((priceChange / recommendedPrice) * 100).toFixed(2) : 0;
+                        const isGain = priceChange > 0;
+                        const changeColor = isGain ? '#10b981' : (priceChange < 0 ? '#ef4444' : '#94a3b8');
+                        const recommendedAt = pick.recommended_at || pick.created_at;
+                        const timeStr = recommendedAt ? new Date(recommendedAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '';
+
+                        return `
                         <div class="absolute-card" data-symbol="${pick.symbol}" style="cursor: pointer; position: relative;">
                             <button onclick="toggleWatchlist('${pick.symbol}', event)" title="Add to Watchlist" style="position: absolute; top: 8px; right: 8px; width: 28px; height: 28px; border-radius: 50%; border: none; background: rgba(255,255,255,0.1); color: #fbbf24; cursor: pointer; font-size: 14px;">⭐</button>
                             <div class="absolute-badge">Rank #${index + 1}</div>
                             <div class="absolute-header">
                                 <div class="absolute-symbol">${pick.symbol}</div>
-                                <div class="absolute-price">₹${pick.current_price ? pick.current_price.toLocaleString('en-IN') : '--'}</div>
+                                <div class="absolute-price">₹${currentPrice.toLocaleString('en-IN')}</div>
                             </div>
                             <div class="absolute-action-row">
                                 <div class="absolute-action ${pick.action.toLowerCase()}">${pick.action}</div>
                                 <div class="absolute-confidence">${Math.round(pick.confidence)}% Growth Potential</div>
                             </div>
+                            ${recommendedPrice && recommendedPrice !== currentPrice ? `
+                            <div style="background: rgba(0,0,0,0.3); padding: 8px; border-radius: 6px; margin: 8px 0; font-size: 12px;">
+                                <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                                    <span style="color: #94a3b8;">Recommended:</span>
+                                    <span style="color: var(--text-primary);">₹${recommendedPrice.toLocaleString('en-IN')} ${timeStr ? `@ ${timeStr}` : ''}</span>
+                                </div>
+                                <div style="display: flex; justify-content: space-between; align-items: center;">
+                                    <span style="color: #94a3b8;">Change:</span>
+                                    <span style="color: ${changeColor}; font-weight: 700;">
+                                        ${isGain ? '+' : ''}₹${Math.abs(priceChange).toFixed(2)} (${isGain ? '+' : ''}${priceChangePct}%)
+                                    </span>
+                                </div>
+                            </div>
+                            ` : ''}
                             <div class="absolute-targets">
                                 ${pick.target_price ? `<div class="target-val">Target: ₹${pick.target_price.toLocaleString('en-IN')}</div>` : ''}
                                 ${pick.stop_loss ? `<div class="sl-val">SL: ₹${pick.stop_loss.toLocaleString('en-IN')}</div>` : ''}
                             </div>
                             <div class="absolute-reason">${pick.reasoning || 'High conviction setup detected.'}</div>
                         </div>
-                    `).join('');
+                        `;
+                    }).join('');
                 }
             } else {
                 const absContainer = document.getElementById('absolutePicks');
@@ -3838,22 +3863,22 @@ async function loadMarketMood() {
 async function loadLivePerformance() {
     try {
         const data = await apiCall('/api/picks/live-performance');
-        
+
         const section = document.getElementById('performanceSection');
         const grid = document.getElementById('performanceGrid');
-        
+
         if (!data.active || data.picks.length === 0) {
             section.style.display = 'none';
             return;
         }
-        
+
         section.style.display = 'block';
-        
+
         grid.innerHTML = data.picks.map(pick => {
             const isGain = pick.change_pct > 0;
             const colorClass = isGain ? 'gain' : 'loss';
             const arrow = isGain ? '↑' : '↓';
-            
+
             return `
                 <div class="performance-card ${colorClass}" data-symbol="${pick.symbol}">
                     <div class="perf-symbol">${pick.symbol}</div>
@@ -3873,14 +3898,14 @@ async function loadLivePerformance() {
                         <span class="change-pct">(${isGain ? '+' : ''}${pick.change_pct.toFixed(2)}%)</span>
                     </div>
                     <div class="perf-time">
-                        Recommended: ${new Date(pick.recommended_at).toLocaleTimeString('en-IN', {hour: '2-digit', minute: '2-digit'})}
+                        Recommended: ${new Date(pick.recommended_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
                     </div>
                 </div>
             `;
         }).join('');
-        
+
         setupUniversalCardClicks(); // Enable clicks on performance cards
-        
+
     } catch (error) {
         console.error('Failed to load performance:', error);
     }
@@ -3890,13 +3915,13 @@ async function loadLivePerformance() {
 function startPerformanceMonitoring() {
     // Initial load
     loadLivePerformance();
-    
+
     // Refresh every 30 seconds during market hours (9:15 AM - 3:30 PM IST)
     setInterval(() => {
         const now = new Date();
         const hour = now.getHours();
         const minutes = now.getMinutes();
-        
+
         // Check if in trading hours (9:15 AM - 3:30 PM) - approximate for browser timezone
         if ((hour === 9 && minutes >= 15) || (hour > 9 && hour < 15) || (hour === 15 && minutes <= 30)) {
             loadLivePerformance();
