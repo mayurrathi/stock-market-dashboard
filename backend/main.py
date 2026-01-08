@@ -470,8 +470,56 @@ async def get_allstar_picks(db: Session = Depends(get_db)):
     # Helper to calculate upside
     def get_upside(p):
         if p.get("current_price") and p.get("target_price") and p["current_price"] > 0:
-            return ((p["target_price"] - p["current_price"]) / p["current_price"]) * 100
+        return ((p["target_price"] - p["current_price"]) / p["current_price"]) * 100
         return 0
+
+@app.get("/api/picks/live-performance")
+async def get_live_performance(db: Session = Depends(get_db)):
+    """Get real-time performance of active picks during trading session"""
+    from backend.trading_hours import is_market_open
+    from datetime import date
+    
+    # Only show during market hours
+    if not is_market_open():
+        return {"active": False, "picks": []}
+    
+    today = datetime.now(IST).date()
+    
+    # Get today's active picks
+    active_picks = db.query(AllStarPick).filter(
+        AllStarPick.is_active_session == True
+    ).all()
+    
+    performance_data = []
+    for pick in active_picks:
+        # Get current price
+        try:
+            current_price_data = await stock_api.get_stock_price(pick.symbol)
+            current_price = current_price_data.get("current_price") if current_price_data else None
+        except:
+            current_price = pick.current_price  # Fallback to stored price
+        
+        if pick.recommended_price and current_price:
+            change = current_price - pick.recommended_price
+            change_pct = (change / pick.recommended_price) * 100
+            
+            performance_data.append({
+                "symbol": pick.symbol,
+                "name": pick.name,
+                "recommended_price": round(pick.recommended_price, 2),
+                "current_price": round(current_price, 2),
+                "change": round(change, 2),
+                "change_pct": round(change_pct, 2),
+                "action": pick.action,
+                "recommended_at": pick.recommended_at.isoformat() if pick.recommended_at else pick.created_at.isoformat()
+            })
+    
+    return {
+        "active": True,
+        "session_date": today.isoformat(),
+        "picks": performance_data,
+        "last_updated": datetime.now(IST).isoformat()
+    }
 
     # Inject growth potential
     for p in picks:
@@ -1108,7 +1156,11 @@ async def _generate_pick_details(symbol: str, stock_data: dict, valid_until,
         stop_loss=stop_loss,
         news_count=data["mentions"],
         sentiment_score=data["bullish"] - data["bearish"],
-        valid_until=valid_until
+        valid_until=valid_until,
+        # Performance tracking
+        recommended_price=current_price,  # Store original price
+        session_date=datetime.now(ist),
+        is_active_session=True
     )
     db.add(pick)
     

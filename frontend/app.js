@@ -3833,3 +3833,80 @@ async function loadMarketMood() {
         container.innerHTML = `<div class="empty-state"><span style="font-size:48px">❌</span><p>Error: ${e.message}</p></div>`;
     }
 }
+
+// ===== Live Performance Tracking =====
+async function loadLivePerformance() {
+    try {
+        const data = await apiCall('/api/picks/live-performance');
+        
+        const section = document.getElementById('performanceSection');
+        const grid = document.getElementById('performanceGrid');
+        
+        if (!data.active || data.picks.length === 0) {
+            section.style.display = 'none';
+            return;
+        }
+        
+        section.style.display = 'block';
+        
+        grid.innerHTML = data.picks.map(pick => {
+            const isGain = pick.change_pct > 0;
+            const colorClass = isGain ? 'gain' : 'loss';
+            const arrow = isGain ? '↑' : '↓';
+            
+            return `
+                <div class="performance-card ${colorClass}" data-symbol="${pick.symbol}">
+                    <div class="perf-symbol">${pick.symbol}</div>
+                    <div class="perf-action">${pick.action}</div>
+                    <div class="perf-prices">
+                        <div class="perf-price-row">
+                            <span class="label">Recommended:</span>
+                            <span class="value">₹${pick.recommended_price.toLocaleString('en-IN')}</span>
+                        </div>
+                        <div class="perf-price-row">
+                            <span class="label">Current:</span>
+                            <span class="value">₹${pick.current_price.toLocaleString('en-IN')}</span>
+                        </div>
+                    </div>
+                    <div class="perf-change ${colorClass}">
+                        <span class="change-amount">${arrow} ${isGain ? '+' : ''}₹${Math.abs(pick.change).toLocaleString('en-IN')}</span>
+                        <span class="change-pct">(${isGain ? '+' : ''}${pick.change_pct.toFixed(2)}%)</span>
+                    </div>
+                    <div class="perf-time">
+                        Recommended: ${new Date(pick.recommended_at).toLocaleTimeString('en-IN', {hour: '2-digit', minute: '2-digit'})}
+                    </div>
+                </div>
+            `;
+        }).join('');
+        
+        setupUniversalCardClicks(); // Enable clicks on performance cards
+        
+    } catch (error) {
+        console.error('Failed to load performance:', error);
+    }
+}
+
+// Auto-refresh during market hours (every 30 seconds)
+function startPerformanceMonitoring() {
+    // Initial load
+    loadLivePerformance();
+    
+    // Refresh every 30 seconds during market hours (9:15 AM - 3:30 PM IST)
+    setInterval(() => {
+        const now = new Date();
+        const hour = now.getHours();
+        const minutes = now.getMinutes();
+        
+        // Check if in trading hours (9:15 AM - 3:30 PM) - approximate for browser timezone
+        if ((hour === 9 && minutes >= 15) || (hour > 9 && hour < 15) || (hour === 15 && minutes <= 30)) {
+            loadLivePerformance();
+        }
+    }, 30000); // 30 seconds
+}
+
+// Start monitoring when page loads
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', startPerformanceMonitoring);
+} else {
+    startPerformanceMonitoring();
+}

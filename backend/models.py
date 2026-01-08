@@ -168,6 +168,13 @@ class AllStarPick(Base):
     news_count = Column(Integer, default=0)  # Number of news mentions
     sentiment_score = Column(Float, nullable=True)  # Combined sentiment
     valid_until = Column(DateTime(timezone=True), nullable=False)  # Expires at 3:30 PM IST next day
+    
+    # Performance tracking fields
+    recommended_price = Column(Float, nullable=True)  # Price at recommendation time
+    recommended_at = Column(DateTime(timezone=True), server_default=func.now())  # When recommended
+    session_date = Column(DateTime(timezone=True), nullable=True)  # Trading session date
+    is_active_session = Column(Boolean, default=True)  # Active during trading hours
+    
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
