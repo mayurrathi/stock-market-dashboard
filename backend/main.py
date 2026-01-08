@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 from .database import engine, SessionLocal, get_db, Base
 from .models import (
     Config, Source, TelegramMessage, MarketNews, 
-    StockPrice, Analysis, Recommendation, Log, FetchLog, WatchlistStock, AllStarPick, PickHistory, SECTOR_MAPPING, Stock
+    StockPrice, Analysis, Recommendation, Log, FetchLog, WatchlistStock, AllStarPick, PickHistory, SECTOR_MAPPING, Stock, TaskLog
 )
 from .monitor import monitor
 from .news_fetcher import NewsFetcher, news_fetcher
@@ -26,6 +26,19 @@ from .quant.signal_analyst import SignalAnalyst
 from .stock_api import stock_api, NSE_STOCKS
 from .analyzer import analyzer, LARGE_CAP_STOCKS, MID_CAP_STOCKS, SMALL_CAP_STOCKS, PENNY_STOCKS
 from .llm import llm_service
+from .utils.error_handler import safe_background_task
+from .config import (
+    NEWS_FETCH_INTERVAL,
+    TELEGRAM_FETCH_INTERVAL,
+    RECOMMENDATION_INTERVAL,
+    CLEANUP_INTERVAL,
+    RECOMMENDATION_RETENTION_DAYS,
+    ANALYSIS_RETENTION_DAYS,
+    LOG_RETENTION_DAYS,
+    FETCH_LOG_RETENTION_DAYS,
+    TASK_HEALTH_THRESHOLD,
+    TELEGRAM_HEALTH_THRESHOLD
+)
 
 import logging
 import pytz
@@ -94,22 +107,22 @@ async def seed_stocks():
         db.close()
 
 
+
+
 async def news_background_task():
-    """Background task to fetch news every 30 minutes"""
-    logger.info("Starting background news fetcher task (30m interval)")
+    """Background task to fetch news periodically (30 min interval)"""
+    logger.info(f"Starting background news fetcher task ({NEWS_FETCH_INTERVAL//60}m interval)")
     while True:
         try:
-            # Wait 30 minutes between fetches
-            # Initial wait of 1 minute to let the server settle
-            await asyncio.sleep(60)
+            # Use safe wrapper to catch errors without stopping the task
+            await safe_background_task(
+                "news_fetch",
+                news_fetcher.fetch_all_feeds
+            )
+            logger.info("Background news fetch complete")
             
-            while True:
-                logger.info("Scheduled background news fetch starting...")
-                added = await news_fetcher.fetch_all_feeds()
-                logger.info(f"Background news fetch complete: {added} new articles")
-                
-                # Wait 30 minutes
-                await asyncio.sleep(1800)
+            # Wait configured interval (30 minutes by default)
+            await asyncio.sleep(NEWS_FETCH_INTERVAL)
         except asyncio.CancelledError:
             logger.info("Background news fetcher task cancelled")
             break
@@ -1860,6 +1873,66 @@ async def get_dashboard_stats(shortcut: Optional[str] = "today", db: Session = D
         "telegram_connected": tg_authorized,
         "last_updated": datetime.now(IST).isoformat()
     }
+
+
+@app.get("/api/health")
+async def health_check(db: Session = Depends(get_db)):
+    """System health check endpoint - monitors background tasks and Telegram connection"""
+    try:
+        # Check last successful task runs (within last hour)
+        one_hour_ago = datetime.now() - timedelta(hours=1)
+        recent_successes = db.query(TaskLog).filter(
+            TaskLog.created_at >= one_hour_ago,
+            TaskLog.status == "success"
+        ).all()
+        
+        # Check for active flood waits
+        active_flood_waits = db.query(TaskLog).filter(
+            TaskLog.status == "flood_wait",
+            TaskLog.retry_after > datetime.now()
+        ).all()
+        
+        # Check telegram authorization
+        telegram_authorized = await monitor.is_authorized()
+        
+        # Calculate health status
+        health_status = "healthy"
+        if len(active_flood_waits) > 0:
+            health_status = "rate_limited"
+        elif len(recent_successes) < 2:  # Expect at least 2 successful tasks per hour
+            health_status = "degraded"
+        
+        # Get task stats
+        task_stats = {}
+        for task_log in recent_successes[-10:]:  # Last 10 successes
+            if task_log.task_name not in task_stats:
+                task_stats[task_log.task_name] = {
+                    "last_success": task_log.created_at.isoformat(),
+                    "count": 0
+                }
+            task_stats[task_log.task_name]["count"] += 1
+        
+        return {
+            "status": health_status,
+            "telegram": {
+                "authorized": telegram_authorized,
+                "last_flood_wait": monitor._last_flood_wait.isoformat() if monitor._last_flood_wait else None,
+                "active_flood_waits": len(active_flood_waits)
+            },
+            "tasks": {
+                "recent_successes": len(recent_successes),
+                "stats": task_stats
+            },
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Health check failed: {e}")
+        return {
+            "status": "error",
+            "error": str(e),
+            "timestamp": datetime.now().isoformat()
+        }
+
 
 
 # ============== Watchlist ==============

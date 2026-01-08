@@ -641,7 +641,8 @@ async function loadAllStarPicks() {
                 const absContainer = document.getElementById('absolutePicks');
                 if (absContainer) {
                     absContainer.innerHTML = data.absolute_picks.map((pick, index) => `
-                        <div class="absolute-card" data-symbol="${pick.symbol}" style="cursor: pointer;">
+                        <div class="absolute-card" data-symbol="${pick.symbol}" style="cursor: pointer; position: relative;">
+                            <button onclick="toggleWatchlist('${pick.symbol}', event)" title="Add to Watchlist" style="position: absolute; top: 8px; right: 8px; width: 28px; height: 28px; border-radius: 50%; border: none; background: rgba(255,255,255,0.1); color: #fbbf24; cursor: pointer; font-size: 14px;">⭐</button>
                             <div class="absolute-badge">Rank #${index + 1}</div>
                             <div class="absolute-header">
                                 <div class="absolute-symbol">${pick.symbol}</div>
@@ -666,7 +667,7 @@ async function loadAllStarPicks() {
 
             container.innerHTML = data.picks.map((pick, index) => `
                 <div class="allstar-card ${pick.action.toLowerCase()}" data-symbol="${pick.symbol}" style="cursor: pointer; position: relative;">
-                    <button onclick="quickAddToWatchlist('${pick.symbol}', event)" title="Add to Watchlist" style="position: absolute; top: 8px; right: 8px; width: 28px; height: 28px; border-radius: 50%; border: none; background: rgba(255,255,255,0.1); color: #fbbf24; cursor: pointer; font-size: 14px;">⭐</button>
+                    <button onclick="toggleWatchlist('${pick.symbol}', event)" title="Add to Watchlist" style="position: absolute; top: 8px; right: 8px; width: 28px; height: 28px; border-radius: 50%; border: none; background: rgba(255,255,255,0.1); color: #fbbf24; cursor: pointer; font-size: 14px;">⭐</button>
                     <div class="allstar-rank">#${index + 1}</div>
                     <div class="allstar-main">
                         <div class="allstar-symbol">${pick.symbol}</div>
@@ -727,7 +728,7 @@ async function loadAllStarPicksPage() {
 
             container.innerHTML = data.picks.map((pick, index) => `
                 <div class="allstar-card ${pick.action.toLowerCase()}" data-symbol="${pick.symbol}" style="cursor: pointer; position: relative;">
-                    <button onclick="quickAddToWatchlist('${pick.symbol}', event)" title="Add to Watchlist" style="position: absolute; top: 8px; right: 8px; width: 28px; height: 28px; border-radius: 50%; border: none; background: rgba(255,255,255,0.1); color: #fbbf24; cursor: pointer; font-size: 14px;">⭐</button>
+                    <button onclick="toggleWatchlist('${pick.symbol}', event)" title="Add to Watchlist" style="position: absolute; top: 8px; right: 8px; width: 28px; height: 28px; border-radius: 50%; border: none; background: rgba(255,255,255,0.1); color: #fbbf24; cursor: pointer; font-size: 14px;">⭐</button>
                     <div class="allstar-rank">#${index + 1}</div>
                     <div class="allstar-main">
                         <div class="allstar-symbol">${pick.symbol}</div>
@@ -903,7 +904,7 @@ async function loadLiveSignals(page = 1) {
                             ${signal.stocks.map(s => `
                                 <span style="display: inline-flex; align-items: center; gap: 4px;">
                                     <span onclick="showStockDetail('${s}')" style="cursor: pointer; font-size: 11px; font-weight: 600; padding: 2px 6px; background: var(--accent-primary); color: #fff; border-radius: 4px;">${s}</span>
-                                    <button onclick="quickAddToWatchlist('${s}', event)" title="Add ${s} to Watchlist" style="width: 20px; height: 20px; border-radius: 50%; border: none; background: rgba(251, 191, 36, 0.2); color: #fbbf24; cursor: pointer; font-size: 10px;">⭐</button>
+                                    <button onclick="toggleWatchlist('${s}', event)" title="Add ${s} to Watchlist" style="width: 20px; height: 20px; border-radius: 50%; border: none; background: rgba(251, 191, 36, 0.2); color: #fbbf24; cursor: pointer; font-size: 10px;">⭐</button>
                                 </span>
                             `).join('')}
                         </div>
@@ -1025,7 +1026,7 @@ function setupUniversalCardClicks() {
     // Single delegated listener for ALL interactive cards and tags across the dashboard
     document.addEventListener('click', (e) => {
         // Handle cards (All Star, Recommendations, News, Messages)
-        const clickable = e.target.closest('.allstar-card, .rec-card, .news-card, .message-card, .watchlist-card, .stock-tag');
+        const clickable = e.target.closest('.absolute-card, .allstar-card, .rec-card, .news-card, .message-card, .watchlist-card, .stock-tag');
         if (!clickable) return;
 
         // Skip if clicking a nested button with its own logic
@@ -1036,7 +1037,7 @@ function setupUniversalCardClicks() {
         // Fallback checks for different card structures
         if (!symbol) {
             // Try multiple selectors for different card types
-            const symbolEl = clickable.querySelector('.allstar-symbol, .rec-symbol, .watchlist-symbol');
+            const symbolEl = clickable.querySelector('.absolute-symbol, .allstar-symbol, .rec-symbol, .watchlist-symbol');
             if (symbolEl) {
                 symbol = symbolEl.textContent.trim();
             }
@@ -2285,7 +2286,7 @@ async function toggleWatchlist(symbol, event) {
 }
 
 // Legacy alias for backwards compatibility
-async function quickAddToWatchlist(symbol, event) {
+async function toggleWatchlist(symbol, event) {
     return toggleWatchlist(symbol, event);
 }
 

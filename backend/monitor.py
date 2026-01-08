@@ -3,11 +3,19 @@ Telegram Monitor - Monitors Telegram channels for stock market data/signals
 """
 import asyncio
 import re
+from datetime import datetime, timedelta
 from telethon import TelegramClient, events, errors
 from telethon.errors import FloodWaitError
 from .database import SessionLocal
-from .models import TelegramMessage, Log, Config, FetchLog, Recommendation
+from .models import TelegramMessage, Log, Config, FetchLog, Recommendation, TaskLog
 from .analyzer import analyzer
+from .utils.error_handler import handle_telegram_flood_wait, CircuitBreaker
+from .config import (
+    TELEGRAM_MAX_RETRIES,
+    TELEGRAM_BASE_DELAY,
+    TELEGRAM_CIRCUIT_BREAKER_THRESHOLD,
+    TELEGRAM_CIRCUIT_BREAKER_TIMEOUT
+)
 import logging
 import pytz
 
@@ -26,6 +34,11 @@ class TelegramMonitor:
         self.monitored_chats = []
         self._api_id = None
         self._api_hash = None
+        self._circuit_breaker = CircuitBreaker(
+            failure_threshold=TELEGRAM_CIRCUIT_BREAKER_THRESHOLD,
+            timeout=TELEGRAM_CIRCUIT_BREAKER_TIMEOUT
+        )
+        self._last_flood_wait = None
 
     async def initialize(self, api_id, api_hash, session_name=None):
         """Initialize the Telegram client with API credentials"""
@@ -54,9 +67,16 @@ class TelegramMonitor:
         try:
             await self.client.connect()
         except FloodWaitError as e:
-            logger.warning(f"Telegram FloodWait triggered during init. Waiting {e.seconds}s required. Skipping connection.")
-            # We don't wait here to avoid blocking server startup
-            self.client = None
+            logger.warning(f"Telegram FloodWait triggered during init. Required wait: {e.seconds}s. Skipping connection.")
+            # Store flood wait info for health monitoring
+            self._last_flood_wait = datetime.now()
+            await handle_telegram_flood_wait(e.seconds, "client_init")
+            # Try to reconnect after waiting
+            try:
+                await self.client.connect()
+            except Exception as reconnect_error:
+                logger.error(f"Failed to reconnect after FloodWait: {reconnect_error}")
+                self.client = None
         except Exception as e:
             logger.error(f"Failed to connect Telegram client: {e}")
             self.client = None
@@ -69,8 +89,14 @@ class TelegramMonitor:
         
         if not self.client.is_connected():
             logger.info("Telegram client disconnected, reconnecting...")
-            await self.client.connect()
-            logger.info("Telegram client reconnected")
+            try:
+                await self.client.connect()
+                logger.info("Telegram client reconnected")
+            except FloodWaitError as e:
+                logger.warning(f"FloodWait during reconnection: {e.seconds}s required")
+                self._last_flood_wait = datetime.now()
+                await handle_telegram_flood_wait(e.seconds, "reconnect")
+                await self.client.connect()  # Retry after waiting
 
     async def send_code(self, phone):
         """Send verification code to phone number"""
@@ -310,36 +336,51 @@ class TelegramMonitor:
                 db.close()
                 return 0
             
-            # Fetch recent messages
-            async for message in self.client.iter_messages(channel, limit=limit):
-                if not message.text:
-                    continue
-                
-                text = message.text
-                message_id = message.id
-                urls = URL_REGEX.findall(text)
-                
-                # Check for duplicate
-                existing = db.query(TelegramMessage).filter(
-                    TelegramMessage.message_id == message_id,
-                    TelegramMessage.channel_id == channel_id
-                ).first()
-                
-                if existing:
-                    continue
-                
-                # Store the message
-                new_message = TelegramMessage(
-                    message_id=message_id,
-                    channel_id=channel_id,
-                    channel_name=channel_name,
-                    text=text,
-                    urls=urls if urls else None,
-                    processed=False,
-                    message_date=message.date.astimezone(IST)
+            # Fetch recent messages with FloodWait handling
+            try:
+                async for message in self.client.iter_messages(channel, limit=limit):
+                    if not message.text:
+                        continue
+                    
+                    text = message.text
+                    message_id = message.id
+                    urls = URL_REGEX.findall(text)
+                    
+                    # Check for duplicate
+                    existing = db.query(TelegramMessage).filter(
+                        TelegramMessage.message_id == message_id,
+                        TelegramMessage.channel_id == channel_id
+                    ).first()
+                    
+                    if existing:
+                        continue
+                    
+                    # Store the message
+                    new_message = TelegramMessage(
+                        message_id=message_id,
+                        channel_id=channel_id,
+                        channel_name=channel_name,
+                        text=text,
+                        urls=urls if urls else None,
+                        processed=False,
+                        message_date=message.date.astimezone(IST)
+                    )
+                    db.add(new_message)
+                    messages_added += 1
+            except FloodWaitError as e:
+                logger.warning(f"FloodWait while fetching messages: {e.seconds}s required")
+                self._last_flood_wait = datetime.now()
+                # Log to database
+                task_log = TaskLog(
+                    task_name="telegram_fetch",
+                    status="flood_wait",
+                    message=f"FloodWait: {e.seconds}s required for {channel_name}",
+                    retry_after=datetime.now() + timedelta(seconds=e.seconds)
                 )
-                db.add(new_message)
-                messages_added += 1
+                db.add(task_log)
+                db.commit()
+                # Don't wait here, just log and return
+                return messages_added
             
             # Log the fetch operation
             fetch_log = FetchLog(

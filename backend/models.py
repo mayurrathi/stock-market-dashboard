@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime, JSON, Float, ForeignKey
+from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime, JSON, Float, ForeignKey, Index
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from .database import Base
@@ -227,9 +227,54 @@ SECTOR_MAPPING = {
     'SBILIFE': ('Finance', 'Insurance'), 'HDFCLIFE': ('Finance', 'Insurance'),
     # Infrastructure
     'LT': ('Infrastructure', 'Construction'), 'ULTRACEMCO': ('Infrastructure', 'Cement'),
-    'GRASIM': ('Infrastructure', 'Cement'), 'ADANIPORTS': ('Infrastructure', 'Ports'),
+    'GRASIM': ('Infrastructure', 'Cement'),    'ADANIPORTS': ('Infrastructure', 'Ports'),
     # Others
     'ASIANPAINT': ('Consumer', 'Paints'), 'TITAN': ('Consumer', 'Jewellery'),
     'BHARTIARTL': ('Telecom', 'Telecom Services'), 'UPL': ('Chemicals', 'Agrochemicals'),
 }
 
+
+class TaskLog(Base):
+    """Background task execution logging for monitoring and health checks"""
+    __tablename__ = "task_logs"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    task_name = Column(String, nullable=False, index=True)  # e.g., "news_fetch", "telegram_fetch"
+    status = Column(String, nullable=False)  # "success", "failed", "flood_wait", "running"
+    message = Column(Text, nullable=True)  # Error message or status details
+    retry_after = Column(DateTime(timezone=True), nullable=True)  # For flood_wait scenarios
+    duration_seconds = Column(Float, nullable=True)  # Task execution time
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+    
+    __table_args__ = (
+        Index('idx_task_logs_name_created', 'task_name', 'created_at'),
+        Index('idx_task_logs_status_created', 'status', 'created_at'),
+    )
+
+
+class FetchLog(Base):
+    """Log of fetch operations (news, Telegram)"""
+    __tablename__ = "fetch_logs"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    source = Column(String, nullable=False)  # "telegram", "news_rss", etc.
+    items_fetched = Column(Integer, default=0)
+    success = Column(Boolean, default=True)
+    error_message = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+    
+    __table_args__ = (
+        Index('idx_fetch_logs_created', 'created_at'),
+    )
+
+
+# Add indexes to existing models for better query performance
+Index('idx_recommendations_created', Recommendation.created_at)
+Index('idx_recommendations_symbol_timeframe', Recommendation.symbol, Recommendation.timeframe)
+Index('idx_analyses_created', Analysis.created_at)
+Index('idx_telegram_messages_created', TelegramMessage.created_at)
+Index('idx_telegram_messages_date', TelegramMessage.message_date)
+Index('idx_market_news_created', MarketNews.created_at)
+Index('idx_market_news_published', MarketNews.published_at)
+Index('idx_allstar_picks_created', AllStarPick.created_at)
+Index('idx_allstar_picks_valid_until', AllStarPick.valid_until)
