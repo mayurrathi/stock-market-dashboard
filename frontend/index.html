@@ -61,6 +61,10 @@
                     <span class="material-icons nav-icon-material">filter_alt</span>
                     <span>Stock Screener</span>
                 </div>
+                <div class="nav-item" data-section="allscreens">
+                    <span class="material-icons nav-icon-material">local_fire_department</span>
+                    <span>All Screens</span>
+                </div>
 
                 <!-- Quant Lab Section -->
                 <div class="nav-section-divider"
@@ -86,6 +90,10 @@
                 <div class="nav-item" data-section="ai">
                     <span class="material-icons nav-icon-material">smart_toy</span>
                     <span>AI Assistant</span>
+                </div>
+                <div class="nav-item" data-section="sources">
+                    <span class="material-icons nav-icon-material">broadcast_on_personal</span>
+                    <span>Telegram Sources</span>
                 </div>
                 <div class="nav-item" data-section="settings">
                     <span class="material-icons nav-icon-material">settings</span>
@@ -411,9 +419,8 @@
             <section class="section hidden" id="news-section">
                 <div class="section-header">
                     <div class="header-main-group">
-                        <h3>📰 Market News</h3>
+                        <h3>🧠 Market Mood & Consensus</h3>
                         <button class="btn btn-icon-round refresh-btn" onclick="refreshCurrentSection()">🔄</button>
-                        <button class="btn btn-secondary" id="refreshNewsBtn">Fetch</button>
                     </div>
                     <div class="header-filter-group">
                         <div class="time-shortcuts">
@@ -458,106 +465,247 @@
                 </div>
             </section>
 
-            <!-- Stock Screener Section -->
+            <!-- Stock Screener Section (Enhanced) -->
             <section class="section hidden" id="screener-section">
                 <div class="section-header">
                     <div class="header-main-group">
                         <h3>📋 Stock Screener</h3>
                         <span class="screen-count" id="screenCount">50+ Screens</span>
                     </div>
+                    <button class="btn btn-primary" id="runConsolidatedBtn">🔥 Scan All Screens</button>
                 </div>
 
-                <div class="screener-controls">
-                    <div class="screener-dropdown">
-                        <select class="screener-select" id="screenerSelect">
-                            <option value="">-- Select a Screen --</option>
-                            <optgroup label="📊 Value Screens">
-                                <option value="low_pe">Low P/E Stocks</option>
-                                <option value="low_pb">Low P/B Stocks (Book Value)</option>
-                                <option value="low_pe_high_roe">Low PE + High ROE</option>
-                                <option value="graham_number">Graham Number Undervalued</option>
-                                <option value="high_dividend_yield">High Dividend Yield (>2%)</option>
-                                <option value="dividend_aristocrats">Dividend Aristocrats</option>
-                                <option value="peg_undervalued">PEG Ratio < 1</option>
-                                <option value="deep_value">Deep Value Picks</option>
-                                <option value="ev_ebitda_low">Low EV/EBITDA</option>
-                                <option value="contrarian_value">Contrarian Value Play</option>
-                            </optgroup>
-                            <optgroup label="🚀 Growth Screens">
-                                <option value="garp">Growth at Reasonable Price (GARP)</option>
-                                <option value="high_roe">High ROE Champions</option>
-                                <option value="high_roce">High ROCE Stars</option>
-                                <option value="profit_growth">Profit Growth Leaders</option>
-                                <option value="compounders">Quality Compounders</option>
-                                <option value="small_cap_growth">Small Cap Growth</option>
-                                <option value="emerging_blue_chips">Emerging Blue Chips</option>
-                                <option value="earnings_momentum">Earnings Momentum</option>
-                            </optgroup>
-                            <optgroup label="💎 Quality Screens">
-                                <option value="debt_free">Debt-Free Gems</option>
-                                <option value="cash_rich">Cash Rich Companies</option>
-                                <option value="consistent_dividend">Consistent Dividend Payers</option>
-                                <option value="blue_chip">Blue Chip Stalwarts</option>
-                                <option value="moat_companies">Economic Moat</option>
-                                <option value="management_quality">Management Quality</option>
-                                <option value="capital_efficient">Capital Efficient</option>
-                                <option value="profit_machines">Profit Machines</option>
-                            </optgroup>
-                            <optgroup label="📈 Technical Screens">
-                                <option value="golden_cross">Golden Cross (MA50/200)</option>
-                                <option value="death_cross_avoid">Avoid Death Cross</option>
-                                <option value="rsi_oversold">RSI Oversold (<30)< /option>
-                                <option value="rsi_overbought">RSI Overbought (>70)</option>
-                                <option value="breakout_52w_high">52-Week High Breakout</option>
-                                <option value="near_52w_low">Near 52-Week Low</option>
-                                <option value="high_volume_surge">Volume Surge</option>
-                                <option value="price_momentum">Price Momentum Leaders</option>
-                            </optgroup>
-                            <optgroup label="🎯 Thematic Screens">
-                                <option value="fii_favorites">FII Favorites</option>
-                                <option value="dii_accumulation">DII Accumulation</option>
-                                <option value="it_sector">IT Sector Champions</option>
-                                <option value="banking_finance">Banking & Finance</option>
-                                <option value="fmcg_consumer">FMCG & Consumer</option>
-                                <option value="infrastructure_play">Infrastructure Play</option>
-                                <option value="defense_psu">Defense & PSU</option>
-                                <option value="ev_green_energy">EV & Green Energy</option>
-                                <option value="rural_consumption">Rural Consumption Play</option>
-                                <option value="export_oriented">Export Oriented</option>
-                            </optgroup>
-                            <optgroup label="🛡️ Safety Screens">
-                                <option value="low_beta">Low Beta Defensive</option>
-                                <option value="recession_proof">Recession Proof</option>
-                                <option value="high_interest_coverage">High Interest Coverage</option>
-                                <option value="stable_earnings">Stable Earnings</option>
-                                <option value="low_volatility">Low Volatility Portfolio</option>
-                                <option value="safe_haven">Safe Haven Picks</option>
-                            </optgroup>
-                        </select>
+                <!-- Strategy Recommendation Banner -->
+                <div class="screener-strategy-banner" id="strategyBanner">
+                    <div class="strategy-header">
+                        <span class="strategy-icon">💡</span>
+                        <h4>Strategic Recommendation for Fresh Capital</h4>
                     </div>
-                    <button class="btn btn-primary" id="runScreenBtn">🔍 Run Screen</button>
+                    <p class="strategy-summary">For deploying fresh capital, focus on <strong>PEG Ratio &lt; 1</strong>
+                        (Value) or <strong>GARP</strong> (Growth). These screens filter for companies growing fast but
+                        not overpriced by the market.</p>
+                    <div class="strategy-rationale">
+                        <span class="rationale-label">Why?</span>
+                        <span>Pure "Value" screens often catch declining businesses. Pure "Growth" screens often catch
+                            overpriced stocks. PEG and GARP find the sweet spot.</span>
+                    </div>
                 </div>
 
-                <div class="screen-info hidden" id="screenInfo">
-                    <h4 id="screenName">Screen Name</h4>
-                    <p id="screenDescription">Description</p>
-                    <span class="match-count" id="matchCount">0 matches</span>
+                <!-- View Toggle -->
+                <div class="screener-view-toggle">
+                    <button class="view-toggle-btn active" data-view="browse">📚 Browse Screens</button>
+                    <button class="view-toggle-btn" data-view="consolidated">🔥 Consolidated Results</button>
                 </div>
 
-                <div class="screener-results" id="screenerResults">
-                    <div class="empty-state">
-                        <span>📋</span>
-                        <p>Select a screen from the dropdown above to find matching stocks</p>
+                <!-- Browse View with Dropdown -->
+                <div class="screener-browse-view" id="screenerBrowseView">
+                    <!-- Screen Selection Dropdown -->
+                    <div class="screen-selector-container"
+                        style="display: flex; gap: 16px; align-items: flex-start; margin-bottom: 24px;">
+                        <div style="flex: 1; max-width: 400px;">
+                            <label
+                                style="display: block; font-size: 13px; color: var(--text-muted); margin-bottom: 8px;">Select
+                                Screen</label>
+                            <select id="screenDropdown" class="screen-dropdown"
+                                style="width: 100%; padding: 12px 16px; font-size: 14px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-secondary); color: var(--text-primary); cursor: pointer;">
+                                <option value="">-- Choose a Screen --</option>
+                            </select>
+                        </div>
+                        <button class="btn btn-primary" id="runSelectedScreenBtn"
+                            style="margin-top: 25px; padding: 12px 24px;" disabled>
+                            ▶️ Run Screen
+                        </button>
+                    </div>
+
+                    <!-- Screen Info Display -->
+                    <div class="screen-info-box hidden" id="screenInfoBox"
+                        style="background: var(--bg-secondary); border-radius: 12px; padding: 20px; margin-bottom: 24px; border: 1px solid var(--border-color);">
+                        <div
+                            style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
+                            <h4 id="screenInfoName" style="margin: 0; font-size: 18px; font-weight: 600;">Screen Name
+                            </h4>
+                            <span id="screenInfoCategory"
+                                style="background: var(--accent-primary); color: #fff; padding: 4px 12px; border-radius: 6px; font-size: 11px; font-weight: 600;">Category</span>
+                        </div>
+                        <div style="margin-bottom: 12px;">
+                            <span
+                                style="font-size: 12px; color: var(--text-muted); text-transform: uppercase;">Definition</span>
+                            <p id="screenInfoDefinition"
+                                style="margin: 4px 0 0 0; color: var(--text-secondary); font-size: 14px;">--</p>
+                        </div>
+                        <div style="margin-bottom: 12px;">
+                            <span
+                                style="font-size: 12px; color: var(--text-muted); text-transform: uppercase;">Summary</span>
+                            <p id="screenInfoSummary"
+                                style="margin: 4px 0 0 0; color: var(--text-primary); font-size: 14px;">--</p>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <span style="font-size: 12px; color: var(--text-muted);">Fresh Entry Rating:</span>
+                            <span id="screenInfoRating" style="color: #f59e0b;">★★★☆☆</span>
+                        </div>
+                    </div>
+
+                    <!-- Screen Results -->
+                    <div class="screen-results-container" id="screenResultsContainer">
+                        <div class="empty-state">
+                            <span>📋</span>
+                            <p>Select a screen from the dropdown to see matching stocks</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Consolidated Results View (Hidden by default) -->
+                <div class="screener-consolidated-view hidden" id="screenerConsolidatedView">
+                    <div class="consolidated-header">
+                        <h4>🔥 Top Picks Across All Screens</h4>
+                        <span class="consolidated-meta" id="consolidatedMeta">--</span>
+                    </div>
+
+                    <!-- Fresh Entry Picks -->
+                    <div class="fresh-entry-section" id="freshEntrySection">
+                        <h5>⭐ Recommended for Fresh Capital</h5>
+                        <div class="fresh-entry-picks" id="freshEntryPicks">
+                            <!-- Populated by JS -->
+                        </div>
+                    </div>
+
+                    <!-- All Aggregated Picks -->
+                    <div class="aggregated-picks-section">
+                        <h5>📋 All Multi-Screen Matches</h5>
+                        <div class="aggregated-picks-grid" id="aggregatedPicksGrid">
+                            <div class="empty-state">
+                                <span>📋</span>
+                                <p>Click "Scan All Screens" to analyze stocks across 50+ screens</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Individual Screen Results (Modal-like) -->
+                <div class="screen-detail-panel hidden" id="screenDetailPanel">
+                    <div class="screen-detail-header">
+                        <button class="back-btn" id="backToScreensBtn">← Back</button>
+                        <div class="screen-detail-info">
+                            <h4 id="screenDetailName">Screen Name</h4>
+                            <span class="match-count" id="screenDetailMatches">0 matches</span>
+                        </div>
+                    </div>
+                    <div class="screen-definition-box" id="screenDefinitionBox">
+                        <div class="definition-row">
+                            <span class="def-label">Definition:</span>
+                            <span id="screenDetailDefinition">--</span>
+                        </div>
+                        <div class="summary-row">
+                            <span class="def-label">Summary:</span>
+                            <span id="screenDetailSummary">--</span>
+                        </div>
+                    </div>
+                    <div class="screener-results" id="screenerResults">
+                        <!-- Populated by JS -->
                     </div>
                 </div>
             </section>
+
+
+            <!-- All Screens Section (New Dedicated Tab) -->
+            <section class="section hidden" id="allscreens-section">
+                <div class="section-header">
+                    <div class="header-main-group">
+                        <h3>🔥 All Screens - Real-Time Multi-Screen Scan</h3>
+                        <button class="btn btn-icon-round refresh-btn" onclick="refreshCurrentSection()">🔄</button>
+                    </div>
+                    <button class="btn btn-primary" id="runAllScreensBtn">⚡ Scan All 50+ Screens</button>
+                </div>
+
+                <div class="disclaimer"
+                    style="margin-bottom: 16px; padding: 12px 16px; background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 8px;">
+                    ⚡ <strong>Real-Time Data:</strong> This scan fetches live fundamentals from Yahoo Finance for all
+                    NSE/BSE stocks. Takes ~30-60 seconds.
+                </div>
+
+                <!-- Scan Progress -->
+                <div class="scan-progress hidden" id="allScreensScanProgress" style="margin-bottom: 24px;">
+                    <div
+                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                        <span id="allScreensProgressText"
+                            style="font-size: 14px; color: var(--text-secondary);">Initializing scan...</span>
+                        <span id="allScreensProgressPercent"
+                            style="font-size: 14px; font-weight: 600; color: var(--accent-primary);">0%</span>
+                    </div>
+                    <div style="height: 6px; background: var(--bg-tertiary); border-radius: 3px; overflow: hidden;">
+                        <div id="allScreensProgressBar"
+                            style="height: 100%; width: 0%; background: var(--accent-gradient); transition: width 0.3s ease;">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Results Stats -->
+                <div class="allscreens-stats hidden" id="allScreensStats"
+                    style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 24px;">
+                    <div
+                        style="background: var(--bg-secondary); padding: 16px; border-radius: 12px; border: 1px solid var(--border-color); text-align: center;">
+                        <div style="font-size: 28px; font-weight: 700; color: var(--accent-primary);"
+                            id="allScreensStocksScanned">0</div>
+                        <div style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">Stocks Scanned</div>
+                    </div>
+                    <div
+                        style="background: var(--bg-secondary); padding: 16px; border-radius: 12px; border: 1px solid var(--border-color); text-align: center;">
+                        <div style="font-size: 28px; font-weight: 700; color: #22c55e;" id="allScreensScreensRun">0
+                        </div>
+                        <div style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">Screens Executed</div>
+                    </div>
+                    <div
+                        style="background: var(--bg-secondary); padding: 16px; border-radius: 12px; border: 1px solid var(--border-color); text-align: center;">
+                        <div style="font-size: 28px; font-weight: 700; color: #f59e0b;" id="allScreensMatchingStocks">0
+                        </div>
+                        <div style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">Multi-Screen Matches
+                        </div>
+                    </div>
+                    <div
+                        style="background: var(--bg-secondary); padding: 16px; border-radius: 12px; border: 1px solid var(--border-color); text-align: center;">
+                        <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 4px;">Last Updated</div>
+                        <div style="font-size: 14px; font-weight: 600; color: var(--text-primary);"
+                            id="allScreensTimestamp">--</div>
+                    </div>
+                </div>
+
+                <!-- Fresh Entry Recommendations -->
+                <div class="allscreens-fresh-picks" id="allScreensFreshSection" style="margin-bottom: 32px;">
+                    <h4 style="margin-bottom: 16px; display: flex; align-items: center; gap: 8px;">
+                        <span>⭐ Top Picks for Fresh Capital</span>
+                        <span
+                            style="font-size: 11px; background: rgba(34, 197, 94, 0.2); color: #22c55e; padding: 2px 8px; border-radius: 4px;">High
+                            Confidence</span>
+                    </h4>
+                    <div id="allScreensFreshPicks" class="allscreens-picks-grid"
+                        style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px;">
+                        <div class="empty-state" style="grid-column: 1 / -1;">
+                            <span>⭐</span>
+                            <p>Click "Scan All 50+ Screens" to discover top picks</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- All Aggregated Results -->
+                <div class="allscreens-all-picks">
+                    <h4 style="margin-bottom: 16px;">📋 All Multi-Screen Matches</h4>
+                    <div id="allScreensAllPicks" class="allscreens-picks-grid"
+                        style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px;">
+                        <div class="empty-state" style="grid-column: 1 / -1;">
+                            <span>📋</span>
+                            <p>Stocks matching 2+ screens will appear here</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
 
             <!-- Exit Tracker Section -->
             <section class="section hidden" id="exittracker-section">
                 <div class="section-header">
                     <div class="header-main-group">
                         <h3>🚪 Exit Tracker - Portfolio Analysis</h3>
-                        <button class="btn btn-icon-round refresh-btn" onclick="loadExitTracker()">🔄</button>
+                        <button class="btn btn-icon-round refresh-btn" onclick="refreshCurrentSection()">🔄</button>
                     </div>
                 </div>
 
@@ -803,7 +951,10 @@
             <!-- Sources Section -->
             <section class="section hidden" id="sources-section">
                 <div class="section-header">
-                    <h3>📡 Telegram Sources</h3>
+                    <div class="header-main-group">
+                        <h3>📡 Telegram Sources</h3>
+                        <button class="btn btn-icon-round refresh-btn" onclick="refreshCurrentSection()">🔄</button>
+                    </div>
                     <button class="btn btn-primary" id="addSourceBtn">+ Add Source</button>
                 </div>
 
@@ -859,6 +1010,24 @@
                     <!-- Telegram Auth -->
                     <div class="settings-card">
                         <h3>📱 Telegram Authentication</h3>
+
+                        <!-- Connected Status (shown when connected) -->
+                        <div id="telegramConnectedStatus" class="hidden"
+                            style="padding: 16px; background: rgba(34,197,94,0.1); border-radius: 8px; margin-bottom: 16px; border: 1px solid rgba(34,197,94,0.3);">
+                            <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
+                                <span
+                                    style="display: inline-block; width: 12px; height: 12px; background: #22c55e; border-radius: 50%; animation: pulse 2s infinite;"></span>
+                                <span style="font-weight: 600; color: #22c55e;">Telegram Connected</span>
+                            </div>
+                            <p style="font-size: 13px; color: var(--text-secondary); margin: 0 0 12px 0;">Your Telegram
+                                account is connected and monitoring channels for signals.</p>
+                            <button class="btn btn-secondary" id="telegramSignOutBtn"
+                                style="background: rgba(239,68,68,0.2); color: #ef4444; border: 1px solid rgba(239,68,68,0.3);">
+                                Sign Out from Telegram
+                            </button>
+                        </div>
+
+                        <!-- Auth Form (shown when not connected) -->
                         <div id="telegramAuth">
                             <div class="form-group">
                                 <label>API ID</label>
@@ -883,6 +1052,7 @@
                             </div>
                         </div>
                     </div>
+
 
                     <!-- Info -->
                     <div class="settings-card">
@@ -1014,15 +1184,8 @@
             <!-- AI Assistant Section - Comprehensive Dashboard -->
             <section class="section hidden" id="ai-section">
                 <div class="section-header">
-                    <div class="header-main-group">
-                        <h3>🤖 AI Recommendations Dashboard</h3>
-                        <p style="color: var(--text-muted); margin: 4px 0 0 0; font-size: 13px;">AI-powered analysis of
-                            24h market signals, news, and Telegram insights</p>
-                    </div>
-                    <button class="btn btn-secondary" onclick="refreshAiDashboard()">
-                        <span class="material-icons" style="font-size: 18px;">refresh</span>
-                        Refresh Analysis
-                    </button>
+                    <h3>🤖 AI Stock Assistant</h3>
+                    <button class="btn btn-icon-round refresh-btn" onclick="refreshCurrentSection()">🔄</button>
                 </div>
 
                 <!-- AI Stats Row -->

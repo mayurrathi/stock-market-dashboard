@@ -259,16 +259,22 @@ async def lifespan(app: FastAPI):
         
         if api_id and api_hash:
             try:
+                logger.info(f"Attempting to restore Telegram session with API_ID: {api_id.value}")
                 await monitor.initialize(int(api_id.value), api_hash.value)
                 if await monitor.is_authorized():
-                    logger.info("Telegram session restored")
+                    logger.info("Telegram session restored successfully")
                     
                     # Start monitoring configured channels
                     channels = db.query(Config).filter(Config.key == "telegram_channels").first()
                     if channels and channels.json_value:
+                        logger.info(f"Starting monitoring for channels: {channels.json_value}")
                         await monitor.start_monitoring(channels.json_value)
+                else:
+                    logger.warning("Telegram session not authorized after initialization")
             except Exception as e:
-                logger.warning(f"Could not restore Telegram: {e}")
+                logger.warning(f"Could not restore Telegram: {e}", exc_info=True)
+        else:
+            logger.warning("Telegram credentials missing in database, skipping restoration")
     finally:
         db.close()
     
@@ -372,10 +378,16 @@ def get_trading_session_expiry_ist() -> datetime:
 
 
 @app.get("/api/allstar")
-async def get_allstar_picks(db: Session = Depends(get_db)):
-    """Get All Star stock picks - persistent per Trading Session (until 3:30 PM)"""
+async def get_allstar_picks(force_refresh: bool = False, db: Session = Depends(get_db)):
+    """Get All Star stock picks - persistent per Trading Session (until 3:30 PM)
+    
+    Args:
+        force_refresh: If True, bypass cache and regenerate fresh data
+    """
     import pytz
     from .analyzer import ALL_STOCKS
+    from .screener import stock_screener
+    from .stock_api import stock_api
     
     ist = pytz.timezone('Asia/Kolkata')
     now = datetime.now(ist)
@@ -385,10 +397,12 @@ async def get_allstar_picks(db: Session = Depends(get_db)):
     current_session_expiry = get_trading_session_expiry_ist()
     
     # Check for cached picks that match this exact session expiry
-    # This guarantees persistence: if generated for this session, they stay until 15:30
-    cached = db.query(AllStarPick).filter(
-        AllStarPick.valid_until == current_session_expiry
-    ).order_by(AllStarPick.confidence.desc()).limit(50).all()
+    # Skip cache if force_refresh is True
+    cached = []
+    if not force_refresh:
+        cached = db.query(AllStarPick).filter(
+            AllStarPick.valid_until == current_session_expiry
+        ).order_by(AllStarPick.confidence.desc()).limit(50).all()
     
     # Validate cached picks
     valid_cached = [p for p in cached if p.symbol in valid_stocks and len(p.symbol) > 2]
@@ -397,6 +411,14 @@ async def get_allstar_picks(db: Session = Depends(get_db)):
         # Return persistent cached picks
         picks_data = []
         for idx, p in enumerate(valid_cached):
+            # Get entry point analysis for this stock
+            fundamentals = stock_api.get_fundamentals(p.symbol)
+            entry_analysis = stock_screener.analyze_stock_for_entry(
+                p.symbol,
+                p.current_price or 0,
+                fundamentals
+            )
+            
             picks_data.append({
                 "id": p.id,
                 "symbol": p.symbol,
@@ -411,7 +433,13 @@ async def get_allstar_picks(db: Session = Depends(get_db)):
                 "news_count": p.news_count,
                 "valid_until": p.valid_until.isoformat() if p.valid_until else None,
                 "is_top_10": idx < 10,
-                "rank": idx + 1
+                "rank": idx + 1,
+                # Entry point fields
+                "next_entry_point": entry_analysis.get("next_entry_point"),
+                "entry_discount_pct": entry_analysis.get("entry_discount_pct"),
+                "entry_reasoning": entry_analysis.get("entry_reasoning"),
+                "matches_screens": entry_analysis.get("matches_screens", []),
+                "quality_score": entry_analysis.get("quality_score", 0)
             })
         
         # Determine logical label for the user
@@ -541,7 +569,7 @@ async def get_live_performance(db: Session = Depends(get_db)):
         "absolute_picks": absolute_picks,
         "cached": False,
         "valid_until": current_session_expiry.isoformat(),
-        "generated_at": datetime.now(ist).isoformat()
+        "generated_at": datetime.now(IST).isoformat()
     }
 
 
@@ -719,6 +747,7 @@ async def get_exit_tracker(db: Session = Depends(get_db)):
     """Get historical picks from last 30 days and analyze which should be sold"""
     import pytz
     from .stock_api import stock_api
+    from .screener import stock_screener
     
     ist = pytz.timezone('Asia/Kolkata')
     now = datetime.now(ist)
@@ -771,6 +800,14 @@ async def get_exit_tracker(db: Session = Depends(get_db)):
             pick.current_action = current_action
             pick.sell_reason = sell_reason
         
+        # Get fundamentals and calculate next entry point
+        fundamentals = stock_api.get_fundamentals(pick.symbol)
+        entry_analysis = stock_screener.analyze_stock_for_entry(
+            pick.symbol, 
+            current_price or pick.recommended_price,
+            fundamentals
+        )
+        
         picks.append({
             "id": pick.id,
             "symbol": pick.symbol,
@@ -786,7 +823,13 @@ async def get_exit_tracker(db: Session = Depends(get_db)):
             "performance_pct": performance_pct,
             "current_action": current_action,
             "sell_reason": sell_reason,
-            "is_sell": current_action == "SELL"
+            "is_sell": current_action == "SELL",
+            # New entry point fields
+            "next_entry_point": entry_analysis.get("next_entry_point"),
+            "entry_discount_pct": entry_analysis.get("entry_discount_pct"),
+            "entry_reasoning": entry_analysis.get("entry_reasoning"),
+            "matches_screens": entry_analysis.get("matches_screens", []),
+            "quality_score": entry_analysis.get("quality_score", 0)
         })
     
     db.commit()
@@ -1159,7 +1202,7 @@ async def _generate_pick_details(symbol: str, stock_data: dict, valid_until,
         valid_until=valid_until,
         # Performance tracking
         recommended_price=current_price,  # Store original price
-        session_date=datetime.now(ist),
+        session_date=datetime.now(IST),
         is_active_session=True
     )
     db.add(pick)
@@ -1227,6 +1270,28 @@ async def telegram_status():
         "authorized": is_authorized,
         "status": monitor.get_status()
     }
+
+
+@app.post("/api/telegram/logout")
+async def telegram_logout():
+    """Sign out from Telegram and clear session"""
+    try:
+        # Stop the monitor
+        await monitor.stop()
+        
+        # Remove session files
+        import os
+        import glob
+        session_files = glob.glob("*.session*") + glob.glob("data/*.session*")
+        for f in session_files:
+            try:
+                os.remove(f)
+            except:
+                pass
+        
+        return {"success": True, "message": "Signed out from Telegram. Please re-authenticate."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to sign out: {str(e)}")
 
 
 # ============== Sources Management ==============
@@ -2350,14 +2415,168 @@ from .expert_engine import expert_engine
 
 @app.get("/api/screens")
 async def get_all_screens():
-    """Get all available stock screens (50+)"""
+    """Get all available stock screens (50+) with full definitions"""
     screens = stock_screener.get_all_screens()
     categories = stock_screener.get_screens_by_category()
+    
+    # Strategic recommendation for fresh capital
+    strategy_recommendation = {
+        "title": "Strategic Recommendation for Fresh Capital",
+        "summary": "For deploying fresh capital, focus on PEG Ratio < 1 (Value) or GARP (Growth). These screens filter for companies growing fast but not overpriced by the market, providing margin of safety with upside potential.",
+        "recommended_screens": ["peg_undervalued", "garp"],
+        "rationale": "Pure 'Value' screens often catch declining businesses. Pure 'Growth' screens often catch overpriced stocks. PEG and GARP find the sweet spot - sustainable growth at reasonable prices."
+    }
+    
     return {
         "total": len(screens),
         "screens": screens,
-        "categories": categories
+        "categories": categories,
+        "strategy_recommendation": strategy_recommendation
     }
+
+
+@app.get("/api/screens/consolidated")
+async def run_consolidated_screens(
+    force_refresh: bool = Query(False, description="Bypass cache and fetch fresh data"),
+    db: Session = Depends(get_db)
+):
+    """Run ALL screens and return aggregated top stocks with analysis and rationale"""
+    import asyncio
+    from collections import defaultdict
+    
+    logger.info(f"Starting consolidated screen run... (force_refresh={force_refresh})")
+    
+    # Clear fundamentals cache if force_refresh
+    if force_refresh and hasattr(stock_api, '_fund_cache'):
+        stock_api._fund_cache = {}
+        logger.info("Cleared fundamentals cache for fresh data fetch")
+    
+    # Fetch all active stocks from database
+    all_stocks = db.query(Stock).filter(Stock.is_active == True).all()
+    
+    # Sort by cap_type priority: Large > Mid > Small
+    cap_priority = {"Large": 0, "Mid": 1, "Small": 2, None: 3}
+    sorted_stocks = sorted(all_stocks, key=lambda s: cap_priority.get(s.cap_type, 3))
+    priority_stocks = sorted_stocks[:80]  # Limit for performance
+    
+    # Fetch live fundamentals in parallel batches
+    stock_data = {}
+    batch_size = 20
+    
+    for i in range(0, len(priority_stocks), batch_size):
+        batch = priority_stocks[i:i+batch_size]
+        tasks = [stock_api.get_live_fundamentals(s.symbol) for s in batch]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        for j, result in enumerate(results):
+            if isinstance(result, dict):
+                stock_data[batch[j].symbol] = result
+            elif not isinstance(result, Exception):
+                stock_data[batch[j].symbol] = stock_api.get_fundamentals(batch[j].symbol)
+    
+    # Add remaining stocks with cached data
+    for s in sorted_stocks[80:150]:  # Include up to 150 stocks
+        stock_data[s.symbol] = stock_api.get_fundamentals(s.symbol)
+    
+    # Run ALL screens and aggregate results
+    stock_screen_matches = defaultdict(list)  # symbol -> list of screen_ids
+    stock_scores = defaultdict(float)  # symbol -> aggregate score
+    screen_results = {}  # screen_id -> results
+    
+    for screen_id, screen in stock_screener.screens.items():
+        try:
+            matches = stock_screener.run_screen_with_data(screen_id, stock_data)
+            screen_results[screen_id] = {
+                "name": screen["name"],
+                "category": screen["category"],
+                "matches": len(matches),
+                "top_stocks": [m["symbol"] for m in matches[:5]]
+            }
+            
+            # Track which screens each stock matches
+            fresh_rating = screen.get("fresh_entry_rating", 3)
+            for match in matches[:10]:  # Top 10 from each screen
+                symbol = match["symbol"]
+                stock_screen_matches[symbol].append({
+                    "screen_id": screen_id,
+                    "screen_name": screen["name"],
+                    "category": screen["category"],
+                    "fresh_entry_rating": fresh_rating
+                })
+                # Weight by fresh entry rating and screen score
+                stock_scores[symbol] += (match["score"] * 0.01) + (fresh_rating * 2)
+        except Exception as e:
+            logger.warning(f"Screen {screen_id} failed: {e}")
+            continue
+    
+    # Build aggregated results - stocks that appear in multiple screens
+    aggregated_picks = []
+    for symbol, screens_matched in stock_screen_matches.items():
+        if len(screens_matched) < 2:  # Must match at least 2 screens
+            continue
+        
+        # Get stock info
+        stock_info = next((s for s in all_stocks if s.symbol == symbol), None)
+        fundamentals = stock_data.get(symbol, {})
+        
+        # Calculate aggregate fresh entry score
+        avg_fresh_rating = sum(s["fresh_entry_rating"] for s in screens_matched) / len(screens_matched)
+        
+        # Get categories matched
+        categories = list(set(s["category"] for s in screens_matched))
+        screen_names = [s["screen_name"] for s in screens_matched]
+        
+        # Build rationale
+        rationale_parts = []
+        if avg_fresh_rating >= 4:
+            rationale_parts.append("⭐ Highly recommended for fresh capital deployment")
+        if "Value" in categories and "Quality" in categories:
+            rationale_parts.append("✅ Strong value + quality combination")
+        if "Growth" in categories and "Safety" in categories:
+            rationale_parts.append("✅ Growth with defensive characteristics")
+        if len(screens_matched) >= 5:
+            rationale_parts.append(f"🔥 Appears in {len(screens_matched)} different screens")
+        
+        rationale = ". ".join(rationale_parts) if rationale_parts else f"Matches {len(screens_matched)} screening criteria."
+        
+        aggregated_picks.append({
+            "symbol": symbol,
+            "name": stock_info.name if stock_info else symbol,
+            "sector": stock_info.sector if stock_info else "Unknown",
+            "cap_type": fundamentals.get("mcap", "Unknown"),
+            "screens_matched": len(screens_matched),
+            "screen_names": screen_names[:6],  # Limit to 6
+            "categories": categories,
+            "aggregate_score": round(stock_scores[symbol], 1),
+            "fresh_entry_rating": round(avg_fresh_rating, 1),
+            "rationale": rationale,
+            "fundamentals": {
+                "pe": fundamentals.get("pe"),
+                "pb": fundamentals.get("pb"),
+                "roe": fundamentals.get("roe"),
+                "roce": fundamentals.get("roce"),
+                "de": fundamentals.get("de"),
+                "div_yield": fundamentals.get("div_yield")
+            }
+        })
+    
+    # Sort by aggregate score (highest first)
+    aggregated_picks.sort(key=lambda x: (-x["screens_matched"], -x["aggregate_score"]))
+    
+    # Get fresh entry recommendations (high rating screens)
+    fresh_entry_picks = [p for p in aggregated_picks if p["fresh_entry_rating"] >= 4][:10]
+    
+    logger.info(f"Consolidated screening complete: {len(aggregated_picks)} stocks across {len(screen_results)} screens")
+    
+    return {
+        "total_stocks_scanned": len(stock_data),
+        "total_screens_run": len(screen_results),
+        "aggregated_picks": aggregated_picks[:30],  # Top 30
+        "fresh_entry_picks": fresh_entry_picks,
+        "screen_summary": screen_results,
+        "generated_at": datetime.now().isoformat()
+    }
+
 
 @app.get("/api/screens/{screen_id}/run")
 async def run_screen(screen_id: str, db: Session = Depends(get_db)):
@@ -2475,40 +2694,26 @@ async def get_expert_recommendation(symbol: str, db: Session = Depends(get_db)):
 
 @app.get("/api/search")
 async def global_search(q: str = Query(..., min_length=1), limit: int = 10, db: Session = Depends(get_db)):
-    """Global instant stock search"""
-    query = q.upper().strip()
+    """Global instant stock search with smart matching"""
+    query = q.strip()
     
-    results = []
+    # Use the hierarchical search from stock_api (exact → starts with → contains → name match)
+    results = stock_api.search_stocks(query, limit=limit)
     
-    # Search in NSE stocks (list of dicts with symbol, name, sector)
-    for stock in NSE_STOCKS:
-        symbol = stock["symbol"]
-        name = stock["name"]
-        sector = stock.get("sector", SECTOR_MAPPING.get(symbol, "General"))
-        if query in symbol or query.lower() in name.lower():
-            results.append({
-                "symbol": symbol,
-                "name": name,
-                "sector": sector,
-                "type": "stock"
-            })
-            if len(results) >= limit:
-                break
-    
-    # Also search in database stocks if we have less than limit
+    # Add database stocks if we have less than limit
     if len(results) < limit:
+        existing_symbols = {r["symbol"] for r in results}
         db_stocks = db.query(Stock).filter(
-            (Stock.symbol.ilike(f"%{query}%")) | 
+            (Stock.symbol.ilike(f"%{query.upper()}%")) | 
             (Stock.name.ilike(f"%{query}%"))
         ).limit(limit - len(results)).all()
         
         for stock in db_stocks:
-            if stock.symbol not in [r["symbol"] for r in results]:
+            if stock.symbol not in existing_symbols:
                 results.append({
                     "symbol": stock.symbol,
                     "name": stock.name or stock.symbol,
-                    "sector": stock.sector or "General",
-                    "type": "stock"
+                    "sector": stock.sector or "General"
                 })
     
     return {

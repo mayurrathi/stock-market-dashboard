@@ -608,16 +608,17 @@ function updateIndexCard(cardId, data) {
 
 // ===== All Star Picks =====
 
-async function loadAllStarPicks() {
+async function loadAllStarPicks(forceRefresh = false) {
     const container = document.getElementById('allstarPicks');
     const timer = document.getElementById('allstarTimer');
 
     try {
-        const data = await apiCall('/api/allstar');
+        // Pass force_refresh to API if requested
+        const url = forceRefresh ? '/api/allstar?force_refresh=true' : '/api/allstar';
+        const data = await apiCall(url);
 
         if (data.picks && data.picks.length > 0) {
-            // Update timer
-            // Update timer
+            // Update timer with generated_at info and cache status
             if (data.generated_at || data.valid_until) {
                 // Prefer generated_at date, fallback to valid_until (which is end of day)
                 const dateStr = data.generated_at || data.valid_until;
@@ -716,6 +717,21 @@ async function loadAllStarPicks() {
                         <span>${Math.round(pick.confidence)}%</span>
                     </div>
                     ${pick.reasoning ? `<div class="allstar-reasoning">${pick.reasoning}</div>` : ''}
+                    ${pick.next_entry_point ? `
+                        <div class="entry-point-section" style="margin-top: 12px; padding-top: 12px; border-top: 1px dashed rgba(255,255,255,0.1);">
+                            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
+                                <span style="font-size: 11px; text-transform: uppercase; color: var(--text-muted);">Next Entry</span>
+                                <span style="font-size: 14px; font-weight: 700; color: #22c55e;">₹${pick.next_entry_point.toLocaleString('en-IN')}</span>
+                                <span style="font-size: 11px; padding: 2px 6px; background: rgba(34,197,94,0.2); color: #22c55e; border-radius: 4px;">-${pick.entry_discount_pct}%</span>
+                            </div>
+                            <div style="font-size: 11px; color: var(--text-secondary); line-height: 1.4;">${pick.entry_reasoning || ''}</div>
+                            ${pick.matches_screens && pick.matches_screens.length > 0 ? `
+                                <div style="display: flex; gap: 4px; flex-wrap: wrap; margin-top: 6px;">
+                                    ${pick.matches_screens.map(s => `<span style="font-size: 9px; padding: 2px 5px; background: rgba(99,102,241,0.2); color: #a5b4fc; border-radius: 3px;">${s}</span>`).join('')}
+                                </div>
+                            ` : ''}
+                        </div>
+                    ` : ''}
                 </div>
             `).join('');
         } else {
@@ -723,19 +739,21 @@ async function loadAllStarPicks() {
         }
     } catch (error) {
         console.error('Failed to load All Star picks:', error);
+
         container.innerHTML = '<div class="empty-state"><span>⚠️</span><p>Failed to load picks</p></div>';
     }
 }
 
 // Load All Star Picks for the dedicated page (uses different container IDs)
-async function loadAllStarPicksPage() {
+async function loadAllStarPicksPage(forceRefresh = false) {
     const container = document.getElementById('allstarPicksPage');
     const timer = document.getElementById('allstarTimerPage');
 
     if (!container) return; // Safety check
 
     try {
-        const data = await apiCall('/api/allstar');
+        const url = forceRefresh ? '/api/allstar?force_refresh=true' : '/api/allstar';
+        const data = await apiCall(url);
 
         if (data.picks && data.picks.length > 0) {
             // Update timer
@@ -752,7 +770,7 @@ async function loadAllStarPicksPage() {
             }
 
             container.innerHTML = data.picks.map((pick, index) => `
-                <div class="allstar-card ${pick.action.toLowerCase()}" data-symbol="${pick.symbol}" style="cursor: pointer; position: relative;">
+            < div class= "allstar-card ${pick.action.toLowerCase()}" data - symbol="${pick.symbol}" style = "cursor: pointer; position: relative;" >
                     <button onclick="toggleWatchlist('${pick.symbol}', event)" title="Add to Watchlist" style="position: absolute; top: 8px; right: 8px; width: 28px; height: 28px; border-radius: 50%; border: none; background: rgba(255,255,255,0.1); color: #fbbf24; cursor: pointer; font-size: 14px;">⭐</button>
                     <div class="allstar-rank">#${index + 1}</div>
                     <div class="allstar-main">
@@ -777,8 +795,25 @@ async function loadAllStarPicksPage() {
                         <span>${Math.round(pick.confidence)}%</span>
                     </div>
                     ${pick.reasoning ? `<div class="allstar-reasoning">${pick.reasoning}</div>` : ''}
-                </div>
-            `).join('');
+                    ${pick.next_entry_point ? `
+                        <div class="entry-point-section" style="margin-top: 12px; padding-top: 12px; border-top: 1px dashed rgba(255,255,255,0.1);">
+                            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
+                                <span style="font-size: 11px; text-transform: uppercase; color: var(--text-muted);">Next Entry</span>
+                                <span style="font-size: 14px; font-weight: 700; color: #22c55e;">₹${pick.next_entry_point.toLocaleString('en-IN')}</span>
+                                <span style="font-size: 11px; padding: 2px 6px; background: rgba(34,197,94,0.2); color: #22c55e; border-radius: 4px;">-${pick.entry_discount_pct}%</span>
+                            </div>
+                            <div style="font-size: 11px; color: var(--text-secondary); line-height: 1.4;">${pick.entry_reasoning || ''}</div>
+                            ${pick.matches_screens && pick.matches_screens.length > 0 ? `
+                                <div style="display: flex; gap: 4px; flex-wrap: wrap; margin-top: 6px;">
+                                    ${pick.matches_screens.map(s => `<span style="font-size: 9px; padding: 2px 5px; background: rgba(99,102,241,0.2); color: #a5b4fc; border-radius: 3px;">${s}</span>`).join('')}
+                                </div>
+                            ` : ''}
+                        </div>
+                    ` : ''
+                }
+                </div >
+                `).join('');
+
         } else {
             container.innerHTML = '<div class="empty-state"><span>📊</span><p>No All Star picks available. Click Refresh to generate.</p></div>';
         }
@@ -822,7 +857,7 @@ async function loadExitTracker() {
                 const gainOperator = pick.performance_pct >= 0 ? '+' : '';
 
                 return `
-                <div class="allstar-card" data-symbol="${pick.symbol}" style="cursor: pointer; position: relative; ${bgStyle} padding-bottom: 8px;">
+            < div class= "allstar-card" data - symbol="${pick.symbol}" style = "cursor: pointer; position: relative; ${bgStyle} padding-bottom: 8px;" >
                      <div style="position: absolute; top: 10px; right: 10px; font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 4px; background: ${isSell ? 'rgba(239,68,68,0.2)' : 'rgba(16,185,129,0.2)'}; color: ${actionColor};">
                         ${pick.current_action}
                      </div>
@@ -856,8 +891,9 @@ async function loadExitTracker() {
                         <span>T: ₹${pick.original_target}</span>
                         <span>SL: ₹${pick.original_stop_loss}</span>
                     </div>
-                    ` : ''}
-                </div>
+                    ` : ''
+                    }
+                </div >
             `;
             }).join('');
         } else {
@@ -876,7 +912,7 @@ let currentNewsPage = 1;
 function renderPaginationControls(currentPage, totalPages, type) {
     const fn = type === 'signals' ? 'loadLiveSignals' : 'loadNews';
     return `
-        <div class="pagination-controls" style="display: flex; justify-content: center; align-items: center; gap: 16px; margin-top: 24px; padding-top: 16px; border-top: 1px dashed var(--border-color);">
+            < div class="pagination-controls" style = "display: flex; justify-content: center; align-items: center; gap: 16px; margin-top: 24px; padding-top: 16px; border-top: 1px dashed var(--border-color);" >
             <button class="btn btn-secondary" ${currentPage <= 1 ? 'disabled style="opacity:0.5; cursor:not-allowed;"' : ''} onclick="${fn}(${currentPage - 1})">
                 ← Previous
             </button>
@@ -884,8 +920,8 @@ function renderPaginationControls(currentPage, totalPages, type) {
             <button class="btn btn-secondary" ${currentPage >= totalPages ? 'disabled style="opacity:0.5; cursor:not-allowed;"' : ''} onclick="${fn}(${currentPage + 1})">
                 Next →
             </button>
-        </div>
-    `;
+        </div >
+            `;
 }
 
 async function loadLiveSignals(page = 1) {
@@ -897,11 +933,11 @@ async function loadLiveSignals(page = 1) {
     if (!container) return;
 
     try {
-        const data = await apiCall(`/api/signals/live?page=${page}&limit=40&days=7`);
+        const data = await apiCall(`/ api / signals / live ? page = ${page}& limit=40 & days=7`);
 
         if (data.signals && data.signals.length > 0) {
             countEl.textContent = data.count;
-            updatedEl.textContent = `Updated: ${new Date(data.last_updated).toLocaleTimeString('en-IN')}`;
+            updatedEl.textContent = `Updated: ${new Date(data.last_updated).toLocaleTimeString('en-IN')} `;
 
             container.innerHTML = data.signals.map(signal => {
                 const actionColors = {
@@ -915,30 +951,38 @@ async function loadLiveSignals(page = 1) {
                 const attentionStyle = signal.requires_attention ? 'border: 2px solid var(--accent-primary); animation: pulse 2s infinite;' : '';
 
                 return `
-                    <div class="signal-card" style="min-width: 280px; background: var(--bg-card); border-radius: 12px; padding: 12px; ${attentionStyle}">
+            < div class="signal-card" style = "min-width: 280px; background: var(--bg-card); border-radius: 12px; padding: 12px; ${attentionStyle}" data - signal - id="${signal.id || ''}" >
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                             <span style="font-size: 11px; color: var(--text-muted);">${signal.channel_name}</span>
-                            <span style="font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 4px; background: ${style.bg}; color: ${style.color};">
-                                ${signal.action}
-                            </span>
+                            <div style="display: flex; align-items: center; gap: 6px;">
+                                <span style="font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 4px; background: ${style.bg}; color: ${style.color};">
+                                    ${signal.action}
+                                </span>
+                            </div>
                         </div>
-                        <div style="font-size: 13px; color: var(--text-secondary); margin-bottom: 8px; line-height: 1.4;">
-                            ${signal.text}
+                        <div class="signal-text-preview" style="font-size: 13px; color: var(--text-secondary); margin-bottom: 8px; line-height: 1.4; max-height: 60px; overflow: hidden; text-overflow: ellipsis;">
+                            ${signal.text.length > 150 ? signal.text.substring(0, 150) + '...' : signal.text}
                         </div>
                         <div style="display: flex; gap: 6px; flex-wrap: wrap; align-items: center;">
-                            ${signal.stocks.map(s => `
-                                <span style="display: inline-flex; align-items: center; gap: 4px;">
-                                    <span onclick="showStockDetail('${s}')" style="cursor: pointer; font-size: 11px; font-weight: 600; padding: 2px 6px; background: var(--accent-primary); color: #fff; border-radius: 4px;">${s}</span>
-                                    <button onclick="toggleWatchlist('${s}', event)" title="Add ${s} to Watchlist" style="width: 20px; height: 20px; border-radius: 50%; border: none; background: rgba(251, 191, 36, 0.2); color: #fbbf24; cursor: pointer; font-size: 10px;">⭐</button>
-                                </span>
-                            `).join('')}
+                            ${signal.stocks.map(s => '<span style="display: inline-flex; align-items: center; gap: 4px;"><span onclick="showStockDetail(\'' + s + '\')" style="cursor: pointer; font-size: 11px; font-weight: 600; padding: 2px 6px; background: var(--accent-primary); color: #fff; border-radius: 4px;">' + s + '</span><button onclick="toggleWatchlist(\'' + s + '\', event)" title="Add ' + s + ' to Watchlist" style="width: 20px; height: 20px; border-radius: 50%; border: none; background: rgba(251, 191, 36, 0.2); color: #fbbf24; cursor: pointer; font-size: 10px;">⭐</button></span>').join('')}
                         </div>
-                        <div style="font-size: 10px; color: var(--text-muted); margin-top: 8px;">
-                            ${new Date(signal.timestamp).toLocaleTimeString('en-IN')}
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.05);">
+                            <span style="font-size: 10px; color: var(--text-muted);">
+                                ${new Date(signal.timestamp).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} • ${new Date(signal.timestamp).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                            <div style="display: flex; gap: 6px;">
+                                <button onclick="expandSignal('${encodeURIComponent(JSON.stringify(signal))}')" title="Expand" style="padding: 4px 8px; font-size: 10px; background: rgba(99,102,241,0.2); color: #a5b4fc; border: none; border-radius: 4px; cursor: pointer;">
+                                    📖 Expand
+                                </button>
+                                <button onclick="searchSignalOnGoogle('${encodeURIComponent(signal.text.substring(0, 100))}')" title="Search on Google" style="padding: 4px 8px; font-size: 10px; background: rgba(34,197,94,0.2); color: #22c55e; border: none; border-radius: 4px; cursor: pointer;">
+                                    🔍 Google
+                                </button>
+                            </div>
                         </div>
-                    </div>
-                `;
+                    </div >
+            `;
             }).join('');
+
 
             // Append Pagination
             if (data.total_pages > 1) {
@@ -972,11 +1016,14 @@ async function refreshCurrentSection() {
 
     try {
         if (activeSection === 'dashboard') {
-            await loadAllStarPicks();
+            // Force refresh to get fresh data when user explicitly clicks refresh
+            await loadAllStarPicks(true);
             // Also refresh indices
             await loadIndices();
         } else if (activeSection === 'allstar') {
-            await loadAllStarPicksPage();
+            await loadAllStarPicksPage(true);
+        } else if (activeSection === 'overview') {
+            await loadMarketOverview();
         } else if (activeSection === 'news') {
             await loadNews();
         } else if (activeSection === 'messages') {
@@ -987,6 +1034,12 @@ async function refreshCurrentSection() {
             await loadWatchlist();
         } else if (activeSection === 'sources') {
             await loadSources();
+        } else if (activeSection === 'exittracker') {
+            await loadExitTracker();
+        } else if (activeSection === 'mood') {
+            await loadMarketMood();
+        } else if (activeSection === 'ai') {
+            await refreshAiDashboard();
         }
         showToast('Refreshed!', 'success', 0); // Persistent until dismissed
     } catch (e) {
@@ -1088,23 +1141,23 @@ function setupUniversalCardClicks() {
 
 async function loadRecommendations() {
     try {
-        const data = await apiCall(`/api/recommendations?timeframe=${currentTimeframe}`);
+        const data = await apiCall(`/ api / recommendations ? timeframe = ${currentTimeframe} `);
         const grid = document.getElementById('recommendationsGrid');
 
         const recs = data.recommendations[currentTimeframe] || [];
 
         if (recs.length === 0) {
             grid.innerHTML = `
-                <div class="empty-state">
+            < div class="empty-state" >
                     <span>🔍</span>
                     <p>No recommendations for this timeframe. Click "Analyze & Recommend" to generate.</p>
-                </div>
-                `;
+                </div >
+            `;
             return;
         }
 
         grid.innerHTML = recs.map(rec => `
-                <div class="rec-card" data-symbol="${rec.symbol}" style="cursor: pointer;">
+            < div class="rec-card" data - symbol="${rec.symbol}" style = "cursor: pointer;" >
                 <div class="rec-header">
                     <span class="rec-symbol">${rec.symbol}</span>
                     <span class="rec-action ${rec.action}">${rec.action}</span>
@@ -1116,8 +1169,8 @@ async function loadRecommendations() {
                         <small style="color: var(--text-muted); font-size: 11px;">${(rec.confidence || 0).toFixed(1)}% confidence</small>
                     </div>
                     <div class="rec-reasoning">${rec.reasoning || 'No details available'}</div>
-                </div>
-                `).join('');
+                </div >
+            `).join('');
 
     } catch (error) {
         console.error('Failed to load recommendations:', error);
@@ -1129,21 +1182,21 @@ async function loadRecommendations() {
 async function loadMessages() {
     try {
         const params = getTimeParams();
-        const data = await apiCall(`/api/messages?${params}&limit=50`);
+        const data = await apiCall(`/ api / messages ? ${params}& limit=50`);
         const list = document.getElementById('messagesList');
 
         if (data.messages.length === 0) {
             list.innerHTML = `
-                <div class="empty-state">
+            < div class="empty-state" >
                     <span>💬</span>
                     <p>No signals in this time range.</p>
-                </div>
-                `;
+                </div >
+            `;
             return;
         }
 
         list.innerHTML = data.messages.map(msg => `
-                <div class="message-card" data-symbol="${msg.extracted_stocks?.length ? msg.extracted_stocks[0] : ''}" style="${msg.extracted_stocks?.length ? 'cursor: pointer;' : ''}">
+            < div class="message-card" data - symbol="${msg.extracted_stocks?.length ? msg.extracted_stocks[0] : ''}" style = "${msg.extracted_stocks?.length ? 'cursor: pointer;' : ''}" >
                 <div class="message-header">
                     <span class="message-channel">${msg.channel_name || 'Unknown Channel'}</span>
                     <span class="message-time">${formatTime(msg.created_at)}</span>
@@ -1156,8 +1209,8 @@ async function loadMessages() {
                 ` : ''
             }
                 ${msg.sentiment ? `<span class="sentiment-badge ${msg.sentiment}">${msg.sentiment}</span>` : ''}
-            </div>
-                `).join('');
+            </div >
+            `).join('');
 
     } catch (error) {
         console.error('Failed to load messages:', error);
@@ -1170,21 +1223,21 @@ async function loadNews(page = 1) {
     currentNewsPage = page;
     try {
         const params = getTimeParams();
-        const data = await apiCall(`/api/news?${params}&page=${page}&limit=40`);
+        const data = await apiCall(`/ api / news ? ${params}& page=${page}& limit=40`);
         const list = document.getElementById('newsList');
 
         if (data.news.length === 0) {
             list.innerHTML = `
-                <div class="empty-state">
+            < div class="empty-state" >
                     <span>📰</span>
                     <p>No news articles in this time range. Click "Fetch News" to load latest.</p>
-                </div>
-                `;
+                </div >
+            `;
             return;
         }
 
         list.innerHTML = data.news.map(item => `
-                <div class="news-card" data-symbol="${item.stocks?.length ? item.stocks[0] : ''}" style="${item.stocks?.length ? 'cursor: pointer;' : ''}">
+            < div class="news-card" data - symbol="${item.stocks?.length ? item.stocks[0] : ''}" style = "${item.stocks?.length ? 'cursor: pointer;' : ''}" >
                 <div class="news-header">
                     <span class="news-source">${formatSource(item.source)}</span>
                     <span class="news-time">${formatTime(item.published_at)}</span>
@@ -1200,8 +1253,8 @@ async function loadNews(page = 1) {
                 ` : ''
             }
                 ${item.sentiment ? `<span class="sentiment-badge ${item.sentiment}">${item.sentiment}</span>` : ''}
-            </div>
-                `).join('');
+            </div >
+            `).join('');
 
         // Append Pagination
         if (data.total_pages > 1) {
@@ -1221,7 +1274,7 @@ async function loadRecommendationsFull() {
         const timeframes = ['next_day', 'next_week', 'next_month', '1yr', '2yr', '5yr', '10yr'];
 
         timeframes.forEach(tf => {
-            const container = document.querySelector(`#tf-${tf} .tf-recs`);
+            const container = document.querySelector(`#tf - ${tf} .tf - recs`);
             if (!container) return; // Safety check: skip if container doesn't exist
 
             const recs = data.recommendations[tf] || [];
@@ -1232,9 +1285,9 @@ async function loadRecommendationsFull() {
             }
 
             container.innerHTML = recs.slice(0, 5).map(rec => `
-                <div class="rec-card" onclick="showRecommendationReasoning('${rec.symbol}', '${tf}', '${rec.action}', ${rec.confidence || 0}, \`${(rec.reasoning || 'No reasoning available').replace(/`/g, "'")}\`)" 
-                     title="${rec.reasoning || 'Click for details'}" 
-                     style="cursor: pointer;">
+                <div class="rec-card" onclick="showRecommendationReasoning('${rec.symbol}', '${tf}', '${rec.action}', ${rec.confidence || 0}, '${(rec.reasoning || 'No reasoning available').replace(/'/g, "\\'")}')" 
+                    title="${rec.reasoning || 'Click for details'}"
+                    style="cursor: pointer;">
                     <div class="rec-header">
                         <span class="rec-symbol">${rec.symbol}</span>
                         <span class="rec-action ${rec.action}">${rec.action}</span>
@@ -1243,8 +1296,8 @@ async function loadRecommendationsFull() {
                     <div class="rec-reasoning-preview" style="font-size: 11px; color: var(--text-secondary); margin-top: 4px; line-height: 1.3; max-height: 32px; overflow: hidden;">
                         ${rec.reasoning ? rec.reasoning.substring(0, 80) + '...' : ''}
                     </div>
-                </div>
-                `).join('');
+                </div >
+            `).join('');
         });
 
     } catch (error) {
@@ -1261,16 +1314,16 @@ async function loadSources() {
 
         if (sources.length === 0) {
             list.innerHTML = `
-                <div class="empty-state">
+            < div class="empty-state" >
                     <span>📡</span>
                     <p>No sources configured. Click "Add Source" to add Telegram channels.</p>
-                </div>
-                `;
+                </div >
+            `;
             return;
         }
 
         list.innerHTML = sources.map(source => `
-                <div class="source-card">
+            < div class="source-card" >
                 <div class="source-header">
                     <span class="source-name">${escapeHtml(source.name)}</span>
                     <span class="source-status ${source.active ? '' : 'inactive'}"></span>
@@ -1283,8 +1336,8 @@ async function loadSources() {
                     <button class="btn btn-secondary" onclick="fetchSource(${source.id})">Fetch</button>
                     <button class="btn btn-secondary" onclick="deleteSource(${source.id})" style="color: var(--danger);">Delete</button>
                 </div>
-            </div>
-                `).join('');
+            </div >
+            `).join('');
 
     } catch (error) {
         console.error('Failed to load sources:', error);
@@ -1293,7 +1346,7 @@ async function loadSources() {
 
 async function fetchSource(sourceId) {
     try {
-        const result = await apiCall(`/api/sources/${sourceId}/fetch`, { method: 'POST' });
+        const result = await apiCall(`/ api / sources / ${sourceId}/fetch`, { method: 'POST' });
         alert(`Fetched ${result.messages_fetched} messages!`);
         loadSources();
         loadDashboardStats();
@@ -1510,20 +1563,40 @@ async function loadSettings() {
     // Load and display Telegram credentials (masked for security)
     try {
         const telegramStatus = await apiCall('/api/telegram/status');
+        const connectedStatus = document.getElementById('telegramConnectedStatus');
+        const authForm = document.getElementById('telegramAuth');
 
         if (telegramStatus.authorized) {
-            // Show that Telegram is configured
-            const apiIdInput = document.getElementById('apiId');
-            const apiHashInput = document.getElementById('apiHash');
-            const phoneInput = document.getElementById('phoneNumber');
+            // Show connected status, hide auth form
+            if (connectedStatus) connectedStatus.classList.remove('hidden');
+            if (authForm) authForm.classList.add('hidden');
 
-            if (apiIdInput) apiIdInput.placeholder = '✅ API ID configured';
-            if (apiHashInput) apiHashInput.placeholder = '✅ API Hash configured';
-            if (phoneInput) phoneInput.placeholder = '✅ Phone verified';
+            // Setup sign out button
+            const signOutBtn = document.getElementById('telegramSignOutBtn');
+            if (signOutBtn) {
+                signOutBtn.onclick = async () => {
+                    if (confirm('Are you sure you want to sign out from Telegram? You will need to re-authenticate.')) {
+                        try {
+                            await apiCall('/api/telegram/logout', { method: 'POST' });
+                            showToast('Signed out from Telegram', 'success');
+                            // Reload settings to show auth form
+                            loadSettings();
+                            checkTelegramStatus();
+                        } catch (e) {
+                            showToast('Failed to sign out', 'error');
+                        }
+                    }
+                };
+            }
+        } else {
+            // Hide connected status, show auth form
+            if (connectedStatus) connectedStatus.classList.add('hidden');
+            if (authForm) authForm.classList.remove('hidden');
         }
     } catch (e) {
         console.error('Failed to load Telegram settings:', e);
     }
+
 
     // Load and display Gemini config
     try {
@@ -1826,6 +1899,65 @@ function showRecommendationReasoning(symbol, timeframe, action, confidence, reas
 
 // Stock chart instance (for cleanup)
 let stockChartInstance = null;
+
+// Expand signal in a modal
+function expandSignal(encodedSignal) {
+    try {
+        const signal = JSON.parse(decodeURIComponent(encodedSignal));
+
+        // Create modal HTML
+        const modalHtml = `
+            <div id="signalExpandModal" class="modal" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); display: flex; align-items: center; justify-content: center; z-index: 9999;" onclick="if(event.target.id === 'signalExpandModal') document.getElementById('signalExpandModal').remove()">
+                <div style="background: var(--bg-secondary); border-radius: 16px; max-width: 600px; width: 90%; max-height: 80vh; overflow-y: auto; padding: 24px; border: 1px solid var(--border-color);">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                        <div>
+                            <span style="font-size: 11px; color: var(--text-muted);">${signal.channel_name || 'Signal'}</span>
+                            <span style="font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 4px; background: var(--accent-primary); color: #fff; margin-left: 8px;">${signal.action || 'INFO'}</span>
+                        </div>
+                        <button onclick="document.getElementById('signalExpandModal').remove()" style="background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 20px;">✕</button>
+                    </div>
+                    <div style="font-size: 14px; color: var(--text-primary); line-height: 1.7; margin-bottom: 16px; white-space: pre-wrap;">
+                        ${signal.text || 'No content'}
+                    </div>
+                    ${signal.stocks && signal.stocks.length > 0 ? `
+                        <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px;">
+                            ${signal.stocks.map(s => '<span onclick="showStockDetail(\'' + s + '\'); document.getElementById(\'signalExpandModal\').remove();" style="cursor: pointer; font-size: 12px; font-weight: 600; padding: 4px 10px; background: var(--accent-primary); color: #fff; border-radius: 6px;">' + s + '</span>').join('')}
+                        </div>
+                    ` : ''}
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding-top: 16px; border-top: 1px solid var(--border-color);">
+                        <span style="font-size: 11px; color: var(--text-muted);">
+                            ${signal.timestamp ? new Date(signal.timestamp).toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''}
+                        </span>
+                        <button onclick="searchSignalOnGoogle('${encodeURIComponent(signal.text ? signal.text.substring(0, 100) : '')}')" style="padding: 8px 16px; background: rgba(34,197,94,0.2); color: #22c55e; border: none; border-radius: 6px; cursor: pointer; font-weight: 600;">
+                            🔍 Search on Google
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        // Remove existing modal if any
+        const existing = document.getElementById('signalExpandModal');
+        if (existing) existing.remove();
+
+        // Add modal to body
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+    } catch (e) {
+        console.error('Failed to expand signal:', e);
+    }
+}
+
+// Search signal content on Google
+function searchSignalOnGoogle(encodedText) {
+    try {
+        const text = decodeURIComponent(encodedText);
+        const query = text.replace(/[^a-zA-Z0-9\s]/g, ' ').trim();
+        const url = 'https://www.google.com/search?q=' + encodeURIComponent(query + ' stock market india');
+        window.open(url, '_blank');
+    } catch (e) {
+        console.error('Failed to search:', e);
+    }
+}
 
 async function showStockDetail(symbol) {
     const modal = document.getElementById('stockDetailModal');
@@ -2578,56 +2710,195 @@ document.addEventListener('DOMContentLoaded', () => {
     setupResearchConsole();
 });
 
+// Stock list cache for instant local search
+let stockListCache = [];
+let stockListLoaded = false;
+
+// Pre-load stock list on first search focus
+async function preloadStockList() {
+    if (stockListLoaded) return;
+    try {
+        const response = await fetch(`${API_BASE}/api/stocks/list`);
+        if (response.ok) {
+            stockListCache = await response.json();
+            stockListLoaded = true;
+        }
+    } catch (e) {
+        console.debug('Could not preload stock list:', e);
+    }
+}
+
+// Highlight matching text in a string
+function highlightMatch(text, query) {
+    if (!query) return text;
+    const regex = new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+    return text.replace(regex, '<mark class="search-highlight">$1</mark>');
+}
+
 function setupHeroSearch() {
     const searchInput = document.getElementById('heroSearchInput');
     const searchResults = document.getElementById('heroSearchResults');
 
     if (!searchInput) return;
 
-    const performSearch = debounce(async (query) => {
+    let selectedIndex = -1;
+    let currentResults = [];
+
+    // Pre-load stock list when user focuses the search
+    searchInput.addEventListener('focus', preloadStockList);
+
+    // Local search in cache for instant results
+    function localSearch(query) {
+        if (!query || query.length < 1 || !stockListLoaded) return [];
+        const q = query.toLowerCase();
+        const qUpper = query.toUpperCase();
+
+        // Priority: exact symbol > starts with > contains in symbol > contains in name
+        const results = [];
+        const seen = new Set();
+
+        // Exact match
+        for (const s of stockListCache) {
+            if (s.symbol === qUpper && !seen.has(s.symbol)) {
+                results.push({ ...s, sector: s.sector || 'General' });
+                seen.add(s.symbol);
+            }
+        }
+
+        // Symbol starts with
+        for (const s of stockListCache) {
+            if (s.symbol.startsWith(qUpper) && !seen.has(s.symbol)) {
+                results.push({ ...s, sector: s.sector || 'General' });
+                seen.add(s.symbol);
+                if (results.length >= 8) break;
+            }
+        }
+
+        // Symbol contains
+        if (results.length < 8) {
+            for (const s of stockListCache) {
+                if (s.symbol.includes(qUpper) && !seen.has(s.symbol)) {
+                    results.push({ ...s, sector: s.sector || 'General' });
+                    seen.add(s.symbol);
+                    if (results.length >= 8) break;
+                }
+            }
+        }
+
+        // Name contains
+        if (results.length < 8) {
+            for (const s of stockListCache) {
+                if (s.name && s.name.toLowerCase().includes(q) && !seen.has(s.symbol)) {
+                    results.push({ ...s, sector: s.sector || 'General' });
+                    seen.add(s.symbol);
+                    if (results.length >= 8) break;
+                }
+            }
+        }
+
+        return results.slice(0, 8);
+    }
+
+    function renderResults(results, query) {
+        currentResults = results;
+        selectedIndex = -1;
+
+        if (results.length > 0) {
+            searchResults.innerHTML = results.map((stock, idx) => `
+                <div class="search-result-item${idx === selectedIndex ? ' selected' : ''}" data-symbol="${stock.symbol}" data-index="${idx}">
+                    <span class="search-result-symbol">${highlightMatch(stock.symbol, query)}</span>
+                    <span class="search-result-name">${highlightMatch(stock.name, query)}</span>
+                    <span class="search-result-sector">${stock.sector}</span>
+                </div>
+            `).join('');
+            searchResults.classList.add('active');
+
+            // Add click handlers
+            searchResults.querySelectorAll('.search-result-item').forEach(item => {
+                item.addEventListener('click', () => {
+                    const symbol = item.dataset.symbol;
+                    searchResults.classList.remove('active');
+                    searchInput.value = '';
+                    showStockDetail(symbol);
+                });
+            });
+        } else {
+            searchResults.innerHTML = '<div class="search-result-item"><span class="search-result-name">No results found</span></div>';
+            searchResults.classList.add('active');
+        }
+    }
+
+    function updateSelection() {
+        searchResults.querySelectorAll('.search-result-item').forEach((item, idx) => {
+            if (idx === selectedIndex) {
+                item.classList.add('selected');
+                item.scrollIntoView({ block: 'nearest' });
+            } else {
+                item.classList.remove('selected');
+            }
+        });
+    }
+
+    // API search with debounce
+    const apiSearch = debounce(async (query) => {
+        try {
+            const response = await fetch(`${API_BASE}/api/search?q=${encodeURIComponent(query)}&limit=8`);
+            const data = await response.json();
+            if (data.results) {
+                renderResults(data.results, query);
+            }
+        } catch (error) {
+            console.error('Search error:', error);
+        }
+    }, 100);
+
+    searchInput.addEventListener('input', (e) => {
+        const query = e.target.value.trim();
         if (query.length < 1) {
             searchResults.classList.remove('active');
             return;
         }
 
-        try {
-            const response = await fetch(`${API_BASE}/api/search?q=${encodeURIComponent(query)}&limit=8`);
-            const data = await response.json();
-
-            if (data.results && data.results.length > 0) {
-                searchResults.innerHTML = data.results.map(stock => `
-                    <div class="search-result-item" data-symbol="${stock.symbol}">
-                        <span class="search-result-symbol">${stock.symbol}</span>
-                        <span class="search-result-name">${stock.name}</span>
-                        <span class="search-result-sector">${stock.sector}</span>
-                    </div>
-                `).join('');
-                searchResults.classList.add('active');
-
-                // Add click handlers
-                searchResults.querySelectorAll('.search-result-item').forEach(item => {
-                    item.addEventListener('click', () => {
-                        const symbol = item.dataset.symbol;
-                        searchResults.classList.remove('active');
-                        searchInput.value = '';
-                        showStockDetail(symbol);
-                    });
-                });
-            } else {
-                searchResults.innerHTML = '<div class="search-result-item"><span class="search-result-name">No results found</span></div>';
-                searchResults.classList.add('active');
-            }
-        } catch (error) {
-            console.error('Search error:', error);
+        // Instant local search first
+        const localResults = localSearch(query);
+        if (localResults.length > 0) {
+            renderResults(localResults, query);
         }
-    }, 200);
 
-    searchInput.addEventListener('input', (e) => {
-        performSearch(e.target.value.trim());
+        // Also fetch from API for more complete results
+        apiSearch(query);
     });
 
     searchInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') {
+        if (!searchResults.classList.contains('active')) return;
+
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            if (selectedIndex < currentResults.length - 1) {
+                selectedIndex++;
+                updateSelection();
+            }
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            if (selectedIndex > 0) {
+                selectedIndex--;
+                updateSelection();
+            }
+        } else if (e.key === 'Enter') {
+            e.preventDefault();
+            if (selectedIndex >= 0 && selectedIndex < currentResults.length) {
+                const symbol = currentResults[selectedIndex].symbol;
+                searchResults.classList.remove('active');
+                searchInput.value = '';
+                showStockDetail(symbol);
+            } else if (currentResults.length > 0) {
+                // Select first result if none selected
+                const symbol = currentResults[0].symbol;
+                searchResults.classList.remove('active');
+                searchInput.value = '';
+                showStockDetail(symbol);
+            }
+        } else if (e.key === 'Escape') {
             searchResults.classList.remove('active');
         }
     });
@@ -2641,114 +2912,381 @@ function setupHeroSearch() {
 }
 
 
-// ===== STOCK SCREENER =====
+// ===== ENHANCED STOCK SCREENER =====
 
-const SCREEN_GLOSSARY = {
-    // Value Screens
-    'low_pe': 'Stocks with a Price-to-Earnings ratio below 15, indicating they may be undervalued relative to their earnings.',
-    'low_pb': 'Stocks with a Price-to-Book ratio below 1.5, suggesting they are trading below or near their book value.',
-    'low_pe_high_roe': 'Undervalued companies (Low P/E) that are efficiently using capital (High ROE > 15%).',
-    'graham_number': 'Stocks trading below their Graham Number (Sqrt(22.5 * EPS * Book Value)), a classic value investing metric.',
-    'high_dividend_yield': 'Companies paying a dividend yield greater than 2%, suitable for income-focused investors.',
-    'dividend_aristocrats': 'Companies with a strong history of consistent dividend payments and growth.',
-    'peg_undervalued': 'Stocks with a PEG ratio < 1, indicating they are undervalued relative to their growth rate.',
-    'deep_value': 'Stocks trading at significant discounts to their intrinsic value or historical averages.',
-    'ev_ebitda_low': 'Companies with a low Enterprise Value to EBITDA ratio, often a better valuation metric than P/E.',
-    'contrarian_value': 'Out-of-favor stocks with strong fundamentals that may be poised for a turnaround.',
+// Cache for screens data
+let screensCache = null;
+let currentCategoryFilter = 'all';
 
-    // Growth Screens
-    'garp': 'Growth At a Reasonable Price (GARP) - stocks showing good growth but not trading at excessive valuations.',
-    'high_roe': 'Companies with Return on Equity > 20%, indicating specific competitive advantages.',
-    'high_roce': 'Companies with High Return on Capital Employed, showing efficient capital allocation.',
-    'profit_growth': 'Companies with consistent profit growth > 20% over the last 3-5 years.',
-    'compounders': 'High-quality businesses that can compound capital at high rates over long periods.',
-    'small_cap_growth': 'High-growth small-cap companies with potential for multi-bagger returns.',
-    'emerging_blue_chips': 'Mid-cap companies on the path to becoming large-cap blue chips.',
-    'earnings_momentum': 'Stocks showing accelerating earnings growth in recent quarters.',
-
-    // Quality Screens
-    'debt_free': 'Companies with zero debt, offering financial stability and lower risk.',
-    'cash_rich': 'Companies holding significant cash reserves on their balance sheet.',
-    'consistent_dividend': 'Companies that have consistently paid dividends without interruption.',
-    'blue_chip': 'Large, established, and financially sound companies with a reputation for quality.',
-    'moat_companies': 'Businesses with a durable competitive advantage (economic moat).',
-    'management_quality': 'Companies known for high-quality, shareholder-friendly management.',
-    'capital_efficient': 'Businesses that generate high returns on minimal capital investment.',
-    'profit_machines': 'Companies with extremely high net profit margins.',
-
-    // Technical Screens
-    'golden_cross': 'Bullish signal where the 50-day MA crosses above the 200-day MA.',
-    'death_cross_avoid': 'Stocks to avoid where the 50-day MA has crossed below the 200-day MA (Bearish).',
-    'rsi_oversold': 'Stocks with RSI < 30, suggesting they are oversold and due for a bounce.',
-    'rsi_overbought': 'Stocks with RSI > 70, suggesting strong momentum (or potential overvaluation).',
-    'breakout_52w_high': 'Stocks breaking out near their 52-week highs, indicating strong uptrend.',
-    'near_52w_low': 'Stocks trading near 52-week lows, potential bottom-fishing candidates.',
-    'high_volume_surge': 'Stocks experiencing unusually high trading volume, indicating strong interest.',
-    'price_momentum': 'Stocks with the strongest price performance over the last 3-6-12 months.',
-
-    // Thematic & Safety
-    'fii_favorites': 'Stocks with high or increasing Foreign Institutional Investor (FII) holding.',
-    'dii_accumulation': 'Stocks being accumulated by Domestic Institutional Investors (DIIs).',
-    'defense_psu': 'Stocks in the Defense and Public Sector Undertaking sectors.',
-    'ev_green_energy': 'Companies involved in Electric Vehicles and Green Energy transition.',
-    'low_beta': 'Low volatility stocks (Beta < 1) that are less risky than the overall market.',
-    'recession_proof': 'Defensive stocks (FMCG, Pharma) that tend to perform well in economic downturns.'
-};
-
-function setupScreener() {
-    const runBtn = document.getElementById('runScreenBtn');
-    const selectEl = document.getElementById('screenerSelect');
-
-    if (!runBtn || !selectEl) return;
-
-    // Run button click
-    runBtn.addEventListener('click', () => {
-        const screenId = selectEl.value;
-        if (screenId) {
-            runScreen(screenId);
-        }
-    });
-
-    // Dropdown change - Instant Glossary + Run
-    selectEl.addEventListener('change', () => {
-        const screenId = selectEl.value;
-        if (screenId) {
-            // Instant Glossary Update
-            const screenInfoEl = document.getElementById('screenInfo');
-            const description = SCREEN_GLOSSARY[screenId] || 'Custom scanning strategy based on market indicators.';
-            const screenName = selectEl.options[selectEl.selectedIndex].text;
-
-            if (screenInfoEl) {
-                document.getElementById('screenName').textContent = screenName;
-                document.getElementById('screenDescription').textContent = description;
-                document.getElementById('matchCount').textContent = 'Loading matches...';
-                screenInfoEl.classList.remove('hidden');
-            }
-
-            runScreen(screenId);
-        }
-    });
+async function loadScreensData() {
+    if (screensCache) return screensCache;
+    try {
+        const response = await fetch(`${API_BASE}/api/screens`);
+        screensCache = await response.json();
+        return screensCache;
+    } catch (error) {
+        console.error('Failed to load screens:', error);
+        return null;
+    }
 }
 
-async function runScreen(screenId) {
-    const resultsEl = document.getElementById('screenerResults');
-    const screenInfoEl = document.getElementById('screenInfo');
+function setupScreener() {
+    // Load screens and populate dropdown
+    loadAndPopulateScreenDropdown();
 
-    resultsEl.innerHTML = '<div class="empty-state"><span>⏳</span><p>Running screen...</p></div>';
+    // Consolidated scan button (on original screener page)
+    const consolidatedBtn = document.getElementById('runConsolidatedBtn');
+    if (consolidatedBtn) {
+        consolidatedBtn.addEventListener('click', runConsolidatedScreening);
+    }
+
+    // View toggle
+    document.querySelectorAll('.view-toggle-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.view-toggle-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+
+            const view = btn.dataset.view;
+            document.getElementById('screenerBrowseView').classList.toggle('hidden', view !== 'browse');
+            document.getElementById('screenerConsolidatedView').classList.toggle('hidden', view !== 'consolidated');
+            document.getElementById('screenDetailPanel').classList.add('hidden');
+        });
+    });
+
+    // Screen Dropdown change handler
+    const screenDropdown = document.getElementById('screenDropdown');
+    const runScreenBtn = document.getElementById('runSelectedScreenBtn');
+
+    if (screenDropdown) {
+        screenDropdown.addEventListener('change', () => {
+            const selectedId = screenDropdown.value;
+            if (selectedId && screensCache) {
+                const screen = screensCache.screens.find(s => s.id === selectedId);
+                if (screen) {
+                    showScreenInfo(screen);
+                    runScreenBtn.disabled = false;
+                }
+            } else {
+                document.getElementById('screenInfoBox').classList.add('hidden');
+                runScreenBtn.disabled = true;
+            }
+        });
+    }
+
+    // Run selected screen button
+    if (runScreenBtn) {
+        runScreenBtn.addEventListener('click', async () => {
+            const screenId = screenDropdown.value;
+            if (screenId) {
+                await runScreenFromDropdown(screenId);
+            }
+        });
+    }
+
+    // Back button
+    const backBtn = document.getElementById('backToScreensBtn');
+    if (backBtn) {
+        backBtn.addEventListener('click', () => {
+            document.getElementById('screenDetailPanel').classList.add('hidden');
+            document.getElementById('screenerBrowseView').classList.remove('hidden');
+        });
+    }
+
+    // Setup All Screens tab
+    setupAllScreensTab();
+}
+
+async function loadAndPopulateScreenDropdown() {
+    const data = await loadScreensData();
+    if (!data) return;
+
+    document.getElementById('screenCount').textContent = `${data.total} Screens`;
+
+    // Populate dropdown grouped by category
+    const dropdown = document.getElementById('screenDropdown');
+    if (!dropdown) return;
+
+    // Group screens by category
+    const categories = {};
+    data.screens.forEach(screen => {
+        const cat = screen.category || 'Other';
+        if (!categories[cat]) categories[cat] = [];
+        categories[cat].push(screen);
+    });
+
+    // Build optgroup HTML
+    let html = '<option value="">-- Choose a Screen --</option>';
+    Object.keys(categories).sort().forEach(cat => {
+        const icon = getCategoryIcon(cat);
+        html += `<optgroup label="${icon} ${cat}">`;
+        categories[cat].forEach(screen => {
+            const recBadge = screen.recommended_for_fresh_entry ? ' ⭐' : '';
+            html += `<option value="${screen.id}">${screen.name}${recBadge}</option>`;
+        });
+        html += '</optgroup>';
+    });
+
+    dropdown.innerHTML = html;
+}
+
+function showScreenInfo(screen) {
+    const infoBox = document.getElementById('screenInfoBox');
+    if (!infoBox) return;
+
+    document.getElementById('screenInfoName').textContent = screen.name;
+    document.getElementById('screenInfoCategory').textContent = `${getCategoryIcon(screen.category)} ${screen.category}`;
+    document.getElementById('screenInfoDefinition').textContent = screen.definition || '--';
+    document.getElementById('screenInfoSummary').textContent = screen.summary || '--';
+
+    const rating = screen.fresh_entry_rating || 3;
+    document.getElementById('screenInfoRating').textContent = '★'.repeat(rating) + '☆'.repeat(5 - rating);
+
+    infoBox.classList.remove('hidden');
+}
+
+async function runScreenFromDropdown(screenId) {
+    const resultsEl = document.getElementById('screenResultsContainer');
+    const runBtn = document.getElementById('runSelectedScreenBtn');
+
+    runBtn.disabled = true;
+    runBtn.innerHTML = '⏳ Running...';
+    resultsEl.innerHTML = '<div class="empty-state"><span class="loading"></span><p>Fetching real-time data...</p></div>';
 
     try {
         const response = await fetch(`${API_BASE}/api/screens/${screenId}/run`);
         const data = await response.json();
 
         if (data.stocks && data.stocks.length > 0) {
-            // Show screen info
-            if (screenInfoEl) {
-                document.getElementById('screenName').textContent = data.screen_name;
-                document.getElementById('screenDescription').textContent = data.description;
-                document.getElementById('matchCount').textContent = `${data.matches} matches`;
-                screenInfoEl.classList.remove('hidden');
-            }
+            resultsEl.innerHTML = `
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                    <span style="color: var(--text-secondary);">${data.matches} stocks matched</span>
+                    <span style="font-size: 12px; color: var(--text-muted);">Scanned ${data.total_scanned} stocks (${data.live_data_count} live)</span>
+                </div>
+                <div class="screener-results-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px;">
+                    ${data.stocks.map(stock => `
+                        <div class="screener-card" onclick="showStockDetail('${stock.symbol}')" style="background: var(--bg-secondary); padding: 16px; border-radius: 12px; border: 1px solid var(--border-color); cursor: pointer; transition: transform 0.2s, border-color 0.2s;">
+                            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
+                                <span style="font-size: 16px; font-weight: 700;">${stock.symbol}</span>
+                                <span style="font-size: 13px; font-weight: 600; color: ${stock.score >= 75 ? '#22c55e' : stock.score >= 50 ? '#f59e0b' : 'var(--text-muted)'};">
+                                    Score: ${Math.round(stock.score)}
+                                </span>
+                            </div>
+                            <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 12px;">${stock.mcap || 'Stock'}</div>
+                            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; font-size: 12px;">
+                                <div><span style="color: var(--text-muted);">P/E:</span> <span style="font-weight: 500;">${stock.pe || '--'}</span></div>
+                                <div><span style="color: var(--text-muted);">ROE:</span> <span style="font-weight: 500;">${stock.roe ? stock.roe.toFixed(1) + '%' : '--'}</span></div>
+                                <div><span style="color: var(--text-muted);">ROCE:</span> <span style="font-weight: 500;">${stock.roce ? stock.roce.toFixed(1) + '%' : '--'}</span></div>
+                                <div><span style="color: var(--text-muted);">D/E:</span> <span style="font-weight: 500;">${stock.de !== undefined ? stock.de.toFixed(2) : '--'}</span></div>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        } else {
+            resultsEl.innerHTML = '<div class="empty-state"><span>📋</span><p>No stocks match this screen criteria</p></div>';
+        }
+    } catch (error) {
+        console.error('Screen error:', error);
+        resultsEl.innerHTML = '<div class="empty-state"><span>❌</span><p>Error running screen</p></div>';
+    } finally {
+        runBtn.disabled = false;
+        runBtn.innerHTML = '▶️ Run Screen';
+    }
+}
 
+function setupAllScreensTab() {
+    const runAllBtn = document.getElementById('runAllScreensBtn');
+    if (runAllBtn) {
+        runAllBtn.addEventListener('click', runAllScreensScan);
+    }
+}
+
+async function runAllScreensScan() {
+    const btn = document.getElementById('runAllScreensBtn');
+    const progressEl = document.getElementById('allScreensScanProgress');
+    const statsEl = document.getElementById('allScreensStats');
+    const freshPicksEl = document.getElementById('allScreensFreshPicks');
+    const allPicksEl = document.getElementById('allScreensAllPicks');
+
+    // Show progress, hide stats
+    btn.disabled = true;
+    btn.innerHTML = '⏳ Scanning...';
+    progressEl.classList.remove('hidden');
+    statsEl.classList.add('hidden');
+
+    // Simulate progress (since API doesn't stream progress)
+    let progress = 0;
+    const progressText = document.getElementById('allScreensProgressText');
+    const progressPercent = document.getElementById('allScreensProgressPercent');
+    const progressBar = document.getElementById('allScreensProgressBar');
+
+    const progressInterval = setInterval(() => {
+        if (progress < 90) {
+            progress += Math.random() * 15;
+            progress = Math.min(progress, 90);
+            progressBar.style.width = `${progress}%`;
+            progressPercent.textContent = `${Math.round(progress)}%`;
+
+            if (progress < 30) progressText.textContent = 'Fetching stock data...';
+            else if (progress < 60) progressText.textContent = 'Running screens...';
+            else progressText.textContent = 'Aggregating results...';
+        }
+    }, 500);
+
+    try {
+        // Fetch with force_refresh to bypass cache
+        const response = await fetch(`${API_BASE}/api/screens/consolidated?force_refresh=true`);
+        const data = await response.json();
+
+        clearInterval(progressInterval);
+        progressBar.style.width = '100%';
+        progressPercent.textContent = '100%';
+        progressText.textContent = 'Complete!';
+
+        // Update stats
+        setTimeout(() => {
+            progressEl.classList.add('hidden');
+            statsEl.classList.remove('hidden');
+
+            document.getElementById('allScreensStocksScanned').textContent = data.total_stocks_scanned || 0;
+            document.getElementById('allScreensScreensRun').textContent = data.total_screens_run || 0;
+            document.getElementById('allScreensMatchingStocks').textContent = data.aggregated_picks?.length || 0;
+            document.getElementById('allScreensTimestamp').textContent = new Date().toLocaleTimeString();
+        }, 500);
+
+        // Render fresh picks
+        if (data.fresh_entry_picks && data.fresh_entry_picks.length > 0) {
+            freshPicksEl.innerHTML = data.fresh_entry_picks.map(pick => renderAllScreensCard(pick, true)).join('');
+        } else {
+            freshPicksEl.innerHTML = '<div class="empty-state" style="grid-column: 1 / -1;"><span>⭐</span><p>No high-confidence picks found</p></div>';
+        }
+
+        // Render all picks
+        if (data.aggregated_picks && data.aggregated_picks.length > 0) {
+            allPicksEl.innerHTML = data.aggregated_picks.map(pick => renderAllScreensCard(pick, false)).join('');
+        } else {
+            allPicksEl.innerHTML = '<div class="empty-state" style="grid-column: 1 / -1;"><span>📋</span><p>No multi-screen matches found</p></div>';
+        }
+
+    } catch (error) {
+        console.error('All screens scan error:', error);
+        clearInterval(progressInterval);
+        progressEl.classList.add('hidden');
+        freshPicksEl.innerHTML = '<div class="empty-state" style="grid-column: 1 / -1;"><span>❌</span><p>Error running scan</p></div>';
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '⚡ Scan All 50+ Screens';
+    }
+}
+
+function renderAllScreensCard(pick, isFresh) {
+    const ratingStars = '★'.repeat(Math.round(pick.fresh_entry_rating || 0)) + '☆'.repeat(5 - Math.round(pick.fresh_entry_rating || 0));
+    const borderColor = isFresh ? 'rgba(34, 197, 94, 0.4)' : 'var(--border-color)';
+
+    return `
+        <div class="allscreens-pick-card" onclick="showStockDetail('${pick.symbol}')" style="background: var(--bg-secondary); padding: 16px; border-radius: 12px; border: 1px solid ${borderColor}; cursor: pointer;">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px;">
+                <div>
+                    <span style="font-size: 16px; font-weight: 700;">${pick.symbol}</span>
+                    <span style="font-size: 12px; color: var(--text-muted); margin-left: 8px;">${pick.name || ''}</span>
+                </div>
+                <span style="font-size: 12px; background: var(--accent-primary); color: #fff; padding: 2px 8px; border-radius: 4px;">${pick.screens_matched} screens</span>
+            </div>
+            <div style="display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px;">
+                ${pick.categories.map(c => `<span style="font-size: 10px; background: var(--bg-tertiary); padding: 2px 6px; border-radius: 4px;">${getCategoryIcon(c)} ${c}</span>`).join('')}
+            </div>
+            <p style="font-size: 12px; color: var(--text-secondary); margin: 8px 0; line-height: 1.4;">${pick.rationale || ''}</p>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 8px; font-size: 11px;">
+                <span style="color: #f59e0b;">${ratingStars}</span>
+                <div style="color: var(--text-muted);">
+                    PE: ${pick.fundamentals?.pe || '--'} | ROE: ${pick.fundamentals?.roe ? pick.fundamentals.roe.toFixed(1) + '%' : '--'}
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+async function loadAndRenderScreens() {
+    const data = await loadScreensData();
+    if (!data) return;
+
+    document.getElementById('screenCount').textContent = `${data.total} Screens`;
+}
+
+function renderScreensGrid() {
+    const grid = document.getElementById('screenerGrid');
+    if (!grid || !screensCache) return;
+
+    let screens = screensCache.screens;
+    if (currentCategoryFilter !== 'all') {
+        screens = screens.filter(s => s.category === currentCategoryFilter);
+    }
+
+    if (screens.length === 0) {
+        grid.innerHTML = '<div class="empty-state"><span>📋</span><p>No screens in this category</p></div>';
+        return;
+    }
+
+    grid.innerHTML = screens.map(screen => `
+        <div class="screen-card ${screen.recommended_for_fresh_entry ? 'recommended' : ''}" 
+             data-screen-id="${screen.id}" 
+             onclick="openScreenDetail('${screen.id}')">
+            <div class="screen-card-header">
+                <span class="screen-card-name">${screen.name}</span>
+                ${screen.recommended_for_fresh_entry ? '<span class="fresh-badge">⭐ Recommended</span>' : ''}
+            </div>
+            <div class="screen-card-category">${getCategoryIcon(screen.category)} ${screen.category}</div>
+            <div class="screen-card-definition">${screen.definition}</div>
+            <div class="screen-card-footer">
+                <span class="fresh-rating">Fresh Entry: ${'★'.repeat(screen.fresh_entry_rating)}${'☆'.repeat(5 - screen.fresh_entry_rating)}</span>
+            </div>
+        </div>
+    `).join('');
+}
+
+function getCategoryIcon(category) {
+    const icons = {
+        'Value': '💰',
+        'Growth': '📈',
+        'Quality': '💎',
+        'Technical': '📊',
+        'Thematic': '🏛️',
+        'Safety': '🛡️'
+    };
+    return icons[category] || '📋';
+}
+
+async function openScreenDetail(screenId) {
+    const data = await loadScreensData();
+    const screen = data.screens.find(s => s.id === screenId);
+    if (!screen) return;
+
+    // Show detail panel, hide browse view
+    document.getElementById('screenerBrowseView').classList.add('hidden');
+    document.getElementById('screenDetailPanel').classList.remove('hidden');
+
+    // Populate header
+    document.getElementById('screenDetailName').textContent = screen.name;
+    document.getElementById('screenDetailDefinition').textContent = screen.definition;
+    document.getElementById('screenDetailSummary').textContent = screen.summary;
+    document.getElementById('screenDetailMatches').textContent = 'Loading...';
+
+    // Run the screen
+    await runScreen(screenId);
+}
+
+async function runScreen(screenId) {
+    const resultsEl = document.getElementById('screenerResults');
+
+    resultsEl.innerHTML = '<div class="empty-state"><span class="loading"></span><p>Running screen...</p></div>';
+
+    try {
+        const response = await fetch(`${API_BASE}/api/screens/${screenId}/run`);
+        const data = await response.json();
+
+        document.getElementById('screenDetailMatches').textContent = `${data.matches} matches`;
+
+        if (data.stocks && data.stocks.length > 0) {
             resultsEl.innerHTML = data.stocks.map(stock => `
                 <div class="screener-card" data-symbol="${stock.symbol}" onclick="showStockDetail('${stock.symbol}')">
                     <div class="screener-card-header">
@@ -2780,13 +3318,96 @@ async function runScreen(screenId) {
             `).join('');
         } else {
             resultsEl.innerHTML = '<div class="empty-state"><span>📋</span><p>No stocks match this screen criteria</p></div>';
-            if (screenInfoEl) screenInfoEl.classList.add('hidden');
         }
     } catch (error) {
         console.error('Screen error:', error);
         resultsEl.innerHTML = '<div class="empty-state"><span>❌</span><p>Error running screen</p></div>';
     }
 }
+
+async function runConsolidatedScreening() {
+    const btn = document.getElementById('runConsolidatedBtn');
+    const browseView = document.getElementById('screenerBrowseView');
+    const consolidatedView = document.getElementById('screenerConsolidatedView');
+    const freshPicksEl = document.getElementById('freshEntryPicks');
+    const aggregatedEl = document.getElementById('aggregatedPicksGrid');
+    const metaEl = document.getElementById('consolidatedMeta');
+
+    // Switch to consolidated view
+    document.querySelectorAll('.view-toggle-btn').forEach(b => b.classList.remove('active'));
+    document.querySelector('.view-toggle-btn[data-view="consolidated"]').classList.add('active');
+    browseView.classList.add('hidden');
+    document.getElementById('screenDetailPanel').classList.add('hidden');
+    consolidatedView.classList.remove('hidden');
+
+    // Show loading
+    btn.disabled = true;
+    btn.innerHTML = '⏳ Scanning...';
+    freshPicksEl.innerHTML = '<div class="empty-state"><span class="loading"></span><p>Running 50+ screens...</p></div>';
+    aggregatedEl.innerHTML = '';
+
+    try {
+        const response = await fetch(`${API_BASE}/api/screens/consolidated`);
+        const data = await response.json();
+
+        metaEl.textContent = `Scanned ${data.total_stocks_scanned} stocks across ${data.total_screens_run} screens`;
+
+        // Render fresh entry picks
+        if (data.fresh_entry_picks && data.fresh_entry_picks.length > 0) {
+            freshPicksEl.innerHTML = data.fresh_entry_picks.map(pick => renderAggregatedCard(pick, true)).join('');
+        } else {
+            freshPicksEl.innerHTML = '<div class="empty-state"><span>📋</span><p>No high-confidence fresh entry picks found</p></div>';
+        }
+
+        // Render all aggregated picks
+        if (data.aggregated_picks && data.aggregated_picks.length > 0) {
+            aggregatedEl.innerHTML = data.aggregated_picks.map(pick => renderAggregatedCard(pick, false)).join('');
+        } else {
+            aggregatedEl.innerHTML = '<div class="empty-state"><span>📋</span><p>No multi-screen matches found</p></div>';
+        }
+
+    } catch (error) {
+        console.error('Consolidated screening error:', error);
+        freshPicksEl.innerHTML = '<div class="empty-state"><span>❌</span><p>Error running consolidated screens</p></div>';
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '🔥 Scan All Screens';
+    }
+}
+
+function renderAggregatedCard(pick, isFreshEntry) {
+    const ratingStars = '★'.repeat(Math.round(pick.fresh_entry_rating)) + '☆'.repeat(5 - Math.round(pick.fresh_entry_rating));
+
+    return `
+        <div class="aggregated-card ${isFreshEntry ? 'fresh-entry' : ''}" onclick="showStockDetail('${pick.symbol}')">
+            <div class="aggregated-card-header">
+                <div class="card-left">
+                    <span class="card-symbol">${pick.symbol}</span>
+                    <span class="card-name">${pick.name || pick.symbol}</span>
+                </div>
+                <div class="card-right">
+                    <span class="screens-count">${pick.screens_matched} screens</span>
+                    <span class="fresh-rating-mini">${ratingStars}</span>
+                </div>
+            </div>
+            <div class="card-categories">
+                ${pick.categories.map(c => `<span class="category-badge">${getCategoryIcon(c)} ${c}</span>`).join('')}
+            </div>
+            <div class="card-rationale">${pick.rationale}</div>
+            <div class="card-screens">
+                ${pick.screen_names.slice(0, 4).map(s => `<span class="screen-tag">${s}</span>`).join('')}
+                ${pick.screen_names.length > 4 ? `<span class="screen-tag more">+${pick.screen_names.length - 4}</span>` : ''}
+            </div>
+            <div class="card-fundamentals">
+                <span>P/E: ${pick.fundamentals.pe || '--'}</span>
+                <span>ROE: ${pick.fundamentals.roe ? pick.fundamentals.roe.toFixed(1) + '%' : '--'}</span>
+                <span>ROCE: ${pick.fundamentals.roce ? pick.fundamentals.roce.toFixed(1) + '%' : '--'}</span>
+                <span>D/E: ${pick.fundamentals.de !== undefined ? pick.fundamentals.de.toFixed(2) : '--'}</span>
+            </div>
+        </div>
+    `;
+}
+
 
 
 // ===== RESEARCH CONSOLE =====

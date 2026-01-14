@@ -37,14 +37,15 @@ RSS_FEEDS = {
         "name": "Moneycontrol Markets",
         "url": "https://www.moneycontrol.com/rss/marketreports.xml",
     },
-    "business_standard": {
-        "name": "Business Standard Markets",
-        "url": "https://www.business-standard.com/rss/markets.rss",
-    },
-    "business_standard_companies": {
-        "name": "Business Standard Companies",
-        "url": "https://www.business-standard.com/rss/companies.rss",
-    },
+    # Business Standard - currently returning 302 redirects, disabled
+    # "business_standard": {
+    #     "name": "Business Standard Markets",
+    #     "url": "https://www.business-standard.com/rss/markets.rss",
+    # },
+    # "business_standard_companies": {
+    #     "name": "Business Standard Companies",
+    #     "url": "https://www.business-standard.com/rss/companies.rss",
+    # },
     "livemint": {
         "name": "Livemint Markets",
         "url": "https://www.livemint.com/rss/markets",
@@ -53,14 +54,15 @@ RSS_FEEDS = {
         "name": "Livemint Companies",
         "url": "https://www.livemint.com/rss/companies",
     },
-    "financial_express_markets": {
-        "name": "Financial Express Markets",
-        "url": "https://www.financialexpress.com/market/rss",
-    },
-    "financial_express_companies": {
-        "name": "Financial Express Companies",
-        "url": "https://www.financialexpress.com/companies/rss",
-    },
+    # Financial Express - currently returning 301 redirects, disabled
+    # "financial_express_markets": {
+    #     "name": "Financial Express Markets",
+    #     "url": "https://www.financialexpress.com/market/rss",
+    # },
+    # "financial_express_companies": {
+    #     "name": "Financial Express Companies",
+    #     "url": "https://www.financialexpress.com/companies/rss",
+    # },
     # ===== TV News Channels =====
     "ndtv_profit": {
         "name": "NDTV Profit",
@@ -74,10 +76,11 @@ RSS_FEEDS = {
         "name": "Zee Business",
         "url": "https://zeenews.india.com/rss/business.xml",
     },
-    "news18_business": {
-        "name": "News18 Business",
-        "url": "https://www.news18.com/rss/business.xml",
-    },
+    # News18 - currently returning 308 redirect, disabled
+    # "news18_business": {
+    #     "name": "News18 Business",
+    #     "url": "https://www.news18.com/rss/business.xml",
+    # },
     # ===== Business Dailies =====
     "business_line": {
         "name": "The Hindu Business Line",
@@ -87,11 +90,11 @@ RSS_FEEDS = {
         "name": "Business Line Stocks",
         "url": "https://www.thehindubusinessline.com/markets/stock-markets/feeder/default.rss",
     },
-    # ===== International =====
-    "reuters_india": {
-        "name": "Reuters India Business",
-        "url": "https://feeds.reuters.com/reuters/INbusinessNews",
-    },
+    # Reuters India - DNS issues, disabled
+    # "reuters_india": {
+    #     "name": "Reuters India Business",
+    #     "url": "https://feeds.reuters.com/reuters/INbusinessNews",
+    # },
     # ===== Commodities & Forex =====
     "et_commodities": {
         "name": "ET Commodities",

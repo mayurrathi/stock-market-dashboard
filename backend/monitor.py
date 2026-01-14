@@ -49,11 +49,14 @@ class TelegramMonitor:
         # Use data directory for session persistence
         import os
         if session_name is None:
-            session_name = os.path.join(
-                os.path.dirname(os.path.dirname(__file__)), 
-                "data", 
-                "stock_monitor"
-            )
+            # Consolidate to backend/data/stock_monitor
+            base_dir = os.path.dirname(__file__)
+            data_dir = os.path.join(base_dir, "data")
+            if not os.path.exists(data_dir):
+                os.makedirs(data_dir, exist_ok=True)
+            session_name = os.path.join(data_dir, "stock_monitor")
+        
+        logger.info(f"Initializing TelegramMonitor instance {id(self)} with session: {session_name}")
         
         if self.client:
             # Disconnect existing client first
@@ -422,11 +425,11 @@ class TelegramMonitor:
             return False
 
     def get_status(self) -> dict:
-        """Get the current status of the Telegram monitor"""
         return {
             "is_running": self.is_running,
             "monitored_channels": len(self.monitored_chats),
-            "client_initialized": self.client is not None
+            "client_initialized": self.client is not None,
+            "instance_id": id(self)
         }
 
 

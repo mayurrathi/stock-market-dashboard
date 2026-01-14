@@ -3,6 +3,8 @@ Stock API - Fetches stock prices from free Indian stock market APIs
 """
 import asyncio
 import httpx
+import json
+import os
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional
 import logging
@@ -12,6 +14,20 @@ from .database import SessionLocal
 from .models import StockPrice, FetchLog
 
 logger = logging.getLogger(__name__)
+
+def _load_stocks_from_file():
+    """Load stocks from external JSON file for comprehensive coverage"""
+    data_path = os.path.join(os.path.dirname(__file__), 'data', 'all_stocks.json')
+    if os.path.exists(data_path):
+        try:
+            with open(data_path, 'r') as f:
+                stocks = json.load(f)
+                logger.info(f"Loaded {len(stocks)} stocks from {data_path}")
+                return stocks
+        except Exception as e:
+            logger.warning(f"Failed to load stocks from file: {e}")
+    return None
+
 
 # Comprehensive stock database with fundamental data (simulated/cached)
 STOCK_DATA = {
@@ -48,9 +64,8 @@ STOCK_DATA = {
     "ADANIGREEN": {"pe": 150.5, "pb": 25.5, "roe": 8.5, "roce": 6.5, "de": 5.5, "div_yield": 0, "mcap": "Mid Cap"},
 }
 
-# Comprehensive NSE Stock Database with Names and Sectors
-NSE_STOCKS = [
-    # NIFTY 50 - Large Caps
+# Fallback stock list (used if all_stocks.json is not found)
+_FALLBACK_STOCKS = [
     {"symbol": "RELIANCE", "name": "Reliance Industries Ltd", "sector": "Energy"},
     {"symbol": "TCS", "name": "Tata Consultancy Services", "sector": "IT"},
     {"symbol": "HDFCBANK", "name": "HDFC Bank Ltd", "sector": "Banking"},
@@ -63,93 +78,18 @@ NSE_STOCKS = [
     {"symbol": "KOTAKBANK", "name": "Kotak Mahindra Bank", "sector": "Banking"},
     {"symbol": "LT", "name": "Larsen & Toubro Ltd", "sector": "Infrastructure"},
     {"symbol": "AXISBANK", "name": "Axis Bank Ltd", "sector": "Banking"},
-    {"symbol": "ASIANPAINT", "name": "Asian Paints Ltd", "sector": "Consumer"},
+    {"symbol": "TATAMOTORS", "name": "Tata Motors Ltd", "sector": "Auto"},
     {"symbol": "MARUTI", "name": "Maruti Suzuki India Ltd", "sector": "Auto"},
     {"symbol": "BAJFINANCE", "name": "Bajaj Finance Ltd", "sector": "Finance"},
     {"symbol": "TITAN", "name": "Titan Company Ltd", "sector": "Consumer"},
     {"symbol": "SUNPHARMA", "name": "Sun Pharmaceutical", "sector": "Pharma"},
-    {"symbol": "NESTLEIND", "name": "Nestle India Ltd", "sector": "FMCG"},
     {"symbol": "WIPRO", "name": "Wipro Ltd", "sector": "IT"},
-    {"symbol": "ULTRACEMCO", "name": "UltraTech Cement Ltd", "sector": "Cement"},
-    {"symbol": "HCLTECH", "name": "HCL Technologies Ltd", "sector": "IT"},
-    {"symbol": "BAJAJFINSV", "name": "Bajaj Finserv Ltd", "sector": "Finance"},
-    {"symbol": "POWERGRID", "name": "Power Grid Corporation", "sector": "Power"},
-    {"symbol": "NTPC", "name": "NTPC Ltd", "sector": "Power"},
     {"symbol": "TATASTEEL", "name": "Tata Steel Ltd", "sector": "Metals"},
-    {"symbol": "TECHM", "name": "Tech Mahindra Ltd", "sector": "IT"},
-    {"symbol": "ONGC", "name": "Oil & Natural Gas Corp", "sector": "Energy"},
-    {"symbol": "ADANIENT", "name": "Adani Enterprises Ltd", "sector": "Diversified"},
-    {"symbol": "COALINDIA", "name": "Coal India Ltd", "sector": "Mining"},
-    {"symbol": "JSWSTEEL", "name": "JSW Steel Ltd", "sector": "Metals"},
-    {"symbol": "TATAMOTORS", "name": "Tata Motors Ltd", "sector": "Auto"},
-    {"symbol": "INDUSINDBK", "name": "IndusInd Bank Ltd", "sector": "Banking"},
-    {"symbol": "M&M", "name": "Mahindra & Mahindra Ltd", "sector": "Auto"},
-    {"symbol": "HINDALCO", "name": "Hindalco Industries Ltd", "sector": "Metals"},
-    {"symbol": "BAJAJ-AUTO", "name": "Bajaj Auto Ltd", "sector": "Auto"},
-    {"symbol": "DRREDDY", "name": "Dr Reddy's Laboratories", "sector": "Pharma"},
-    {"symbol": "APOLLOHOSP", "name": "Apollo Hospitals", "sector": "Healthcare"},
-    {"symbol": "EICHERMOT", "name": "Eicher Motors Ltd", "sector": "Auto"},
-    {"symbol": "GRASIM", "name": "Grasim Industries Ltd", "sector": "Cement"},
-    {"symbol": "BRITANNIA", "name": "Britannia Industries", "sector": "FMCG"},
-    {"symbol": "CIPLA", "name": "Cipla Ltd", "sector": "Pharma"},
-    {"symbol": "DIVISLAB", "name": "Divi's Laboratories Ltd", "sector": "Pharma"},
-    {"symbol": "SBILIFE", "name": "SBI Life Insurance", "sector": "Insurance"},
-    {"symbol": "ADANIPORTS", "name": "Adani Ports & SEZ", "sector": "Infrastructure"},
-    {"symbol": "TATACONSUM", "name": "Tata Consumer Products", "sector": "FMCG"},
-    {"symbol": "BPCL", "name": "Bharat Petroleum Corp", "sector": "Energy"},
-    {"symbol": "HEROMOTOCO", "name": "Hero MotoCorp Ltd", "sector": "Auto"},
-    {"symbol": "UPL", "name": "UPL Ltd", "sector": "Chemicals"},
-    {"symbol": "HDFCLIFE", "name": "HDFC Life Insurance", "sector": "Insurance"},
-    {"symbol": "LTIM", "name": "LTIMindtree Ltd", "sector": "IT"},
-    # Additional Popular Stocks
-    {"symbol": "ZOMATO", "name": "Zomato Ltd", "sector": "Consumer Tech"},
-    {"symbol": "PAYTM", "name": "One 97 Communications", "sector": "Fintech"},
-    {"symbol": "NYKAA", "name": "FSN E-Commerce (Nykaa)", "sector": "E-commerce"},
-    {"symbol": "POLICYBZR", "name": "PB Fintech (Policybazaar)", "sector": "Fintech"},
-    {"symbol": "DELHIVERY", "name": "Delhivery Ltd", "sector": "Logistics"},
-    {"symbol": "IRCTC", "name": "IRCTC Ltd", "sector": "Travel"},
-    {"symbol": "TRENT", "name": "Trent Ltd (Westside)", "sector": "Retail"},
-    {"symbol": "DMART", "name": "Avenue Supermarts (DMart)", "sector": "Retail"},
-    {"symbol": "PIDILITIND", "name": "Pidilite Industries", "sector": "Chemicals"},
-    {"symbol": "SIEMENS", "name": "Siemens Ltd", "sector": "Engineering"},
-    {"symbol": "HAVELLS", "name": "Havells India Ltd", "sector": "Consumer Durables"},
-    {"symbol": "ABB", "name": "ABB India Ltd", "sector": "Engineering"},
-    {"symbol": "GODREJCP", "name": "Godrej Consumer Products", "sector": "FMCG"},
-    {"symbol": "MARICO", "name": "Marico Ltd", "sector": "FMCG"},
-    {"symbol": "DABUR", "name": "Dabur India Ltd", "sector": "FMCG"},
-    {"symbol": "COLPAL", "name": "Colgate-Palmolive India", "sector": "FMCG"},
-    {"symbol": "BERGEPAINT", "name": "Berger Paints India", "sector": "Consumer"},
-    {"symbol": "ICICIPRULI", "name": "ICICI Prudential Life", "sector": "Insurance"},
-    {"symbol": "BANKBARODA", "name": "Bank of Baroda", "sector": "Banking"},
-    {"symbol": "PNB", "name": "Punjab National Bank", "sector": "Banking"},
-    {"symbol": "CANBK", "name": "Canara Bank", "sector": "Banking"},
-    {"symbol": "IDFCFIRSTB", "name": "IDFC First Bank Ltd", "sector": "Banking"},
-    {"symbol": "FEDERALBNK", "name": "Federal Bank Ltd", "sector": "Banking"},
-    {"symbol": "BANDHANBNK", "name": "Bandhan Bank Ltd", "sector": "Banking"},
-    {"symbol": "YESBANK", "name": "Yes Bank Ltd", "sector": "Banking"},
-    {"symbol": "JUBLFOOD", "name": "Jubilant FoodWorks (Dominos)", "sector": "QSR"},
-    {"symbol": "PAGEIND", "name": "Page Industries (Jockey)", "sector": "Textiles"},
-    {"symbol": "MUTHOOTFIN", "name": "Muthoot Finance Ltd", "sector": "Finance"},
-    {"symbol": "CHOLAFIN", "name": "Cholamandalam Investment", "sector": "Finance"},
-    {"symbol": "M&MFIN", "name": "Mahindra & Mahindra Financial", "sector": "Finance"},
-    {"symbol": "SHRIRAMFIN", "name": "Shriram Finance Ltd", "sector": "Finance"},
-    {"symbol": "VEDL", "name": "Vedanta Ltd", "sector": "Metals"},
-    {"symbol": "NMDC", "name": "NMDC Ltd", "sector": "Mining"},
-    {"symbol": "SAIL", "name": "Steel Authority of India", "sector": "Metals"},
-    {"symbol": "JINDALSTEL", "name": "Jindal Steel & Power", "sector": "Metals"},
-    {"symbol": "ADANIGREEN", "name": "Adani Green Energy", "sector": "Renewable Energy"},
-    {"symbol": "ADANIPOWER", "name": "Adani Power Ltd", "sector": "Power"},
-    {"symbol": "TATAPOWER", "name": "Tata Power Company", "sector": "Power"},
-    {"symbol": "TORNTPOWER", "name": "Torrent Power Ltd", "sector": "Power"},
-    {"symbol": "RECLTD", "name": "REC Ltd", "sector": "Finance"},
-    {"symbol": "PFC", "name": "Power Finance Corporation", "sector": "Finance"},
-    {"symbol": "IOC", "name": "Indian Oil Corporation", "sector": "Energy"},
-    {"symbol": "GAIL", "name": "GAIL (India) Ltd", "sector": "Energy"},
-    {"symbol": "PETRONET", "name": "Petronet LNG Ltd", "sector": "Energy"},
-    {"symbol": "HAL", "name": "Hindustan Aeronautics", "sector": "Defence"},
-    {"symbol": "BEL", "name": "Bharat Electronics Ltd", "sector": "Defence"},
-    {"symbol": "BHEL", "name": "Bharat Heavy Electricals", "sector": "Engineering"},
+    {"symbol": "NTPC", "name": "NTPC Ltd", "sector": "Power"},
 ]
+
+# Load comprehensive stock database from file, fallback to minimal list
+NSE_STOCKS = _load_stocks_from_file() or _FALLBACK_STOCKS
 
 # Simple list for backward compatibility
 NIFTY_50_SYMBOLS = [s["symbol"] for s in NSE_STOCKS[:50]]
