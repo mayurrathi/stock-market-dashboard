@@ -10,7 +10,7 @@ import logging
 
 from fastapi import FastAPI, HTTPException, Depends, Query
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -341,11 +341,7 @@ class WatchlistUpdate(BaseModel):
 
 
 
-# ============== Health Check ==============
-
-@app.get("/api/health")
-async def health_check():
-    return {"status": "healthy", "timestamp": datetime.now().isoformat()}
+# Health check is defined below (comprehensive version at line ~1995)
 
 
 # ============== All Star Picks (Top 10 Daily) ==============
@@ -501,10 +497,34 @@ async def get_allstar_picks(force_refresh: bool = False, db: Session = Depends(g
             return ((p["target_price"] - p["current_price"]) / p["current_price"]) * 100
         return 0
 
+    # Inject growth potential
+    for p in picks:
+        p["growth_potential"] = get_upside(p)
+
+    # Select Absolute Picks (Top 5 High Growth Potential)
+    absolute_candidates = [p for p in picks if p["action"] == "BUY"]
+    absolute_candidates.sort(key=lambda x: x["growth_potential"], reverse=True)
+    
+    if len(absolute_candidates) < 5:
+        remaining = [p for p in picks if p not in absolute_candidates and p["action"] != "SELL"]
+        remaining.sort(key=lambda x: x["growth_potential"], reverse=True)
+        absolute_candidates.extend(remaining[:5 - len(absolute_candidates)])
+        
+    absolute_picks = absolute_candidates[:5]
+    
+    return {
+        "picks": picks,
+        "absolute_picks": absolute_picks,
+        "cached": False,
+        "valid_until": current_session_expiry.isoformat(),
+        "generated_at": datetime.now(IST).isoformat()
+    }
+
+
 @app.get("/api/picks/live-performance")
 async def get_live_performance(db: Session = Depends(get_db)):
     """Get real-time performance of active picks during trading session"""
-    from backend.trading_hours import is_market_open
+    from .trading_hours import is_market_open
     from datetime import date
     
     # Only show during market hours
@@ -547,29 +567,6 @@ async def get_live_performance(db: Session = Depends(get_db)):
         "session_date": today.isoformat(),
         "picks": performance_data,
         "last_updated": datetime.now(IST).isoformat()
-    }
-
-    # Inject growth potential
-    for p in picks:
-        p["growth_potential"] = get_upside(p)
-
-    # Select Absolute Picks (Top 5 High Growth Potential)
-    absolute_candidates = [p for p in picks if p["action"] == "BUY"]
-    absolute_candidates.sort(key=lambda x: x["growth_potential"], reverse=True)
-    
-    if len(absolute_candidates) < 5:
-        remaining = [p for p in picks if p not in absolute_candidates and p["action"] != "SELL"]
-        remaining.sort(key=lambda x: x["growth_potential"], reverse=True)
-        absolute_candidates.extend(remaining[:5 - len(absolute_candidates)])
-        
-    absolute_picks = absolute_candidates[:5]
-    
-    return {
-        "picks": picks,
-        "absolute_picks": absolute_picks,
-        "cached": False,
-        "valid_until": current_session_expiry.isoformat(),
-        "generated_at": datetime.now(IST).isoformat()
     }
 
 
@@ -672,12 +669,13 @@ async def get_sell_picks(db: Session = Depends(get_db)):
             sell_score += 15
         
         # Risk penalty for quality stocks (20%) - hesitate to sell large caps
+        # Large caps get LESS sell pressure, penny stocks get MORE
         if symbol in LARGE_CAP_STOCKS:
-            sell_score += 10  # Less eager to sell
+            sell_score -= 10  # Subtract: hesitate to sell quality large caps
         elif symbol in MID_CAP_STOCKS:
-            sell_score += 15
+            sell_score -= 5
         elif symbol in SMALL_CAP_STOCKS:
-            sell_score += 18
+            sell_score += 10
         elif symbol in PENNY_STOCKS:
             sell_score += 20  # More eager to sell penny stocks
         
@@ -1711,157 +1709,214 @@ async def get_recommendations(
 async def get_stock_detail(symbol: str, db: Session = Depends(get_db)):
     """Get comprehensive stock detail for modal view - includes chart data, ratios, and external links"""
     from .stock_api import stock_api, NSE_STOCKS
-    from .analyzer import analyzer, LARGE_CAP_STOCKS, MID_CAP_STOCKS, SMALL_CAP_STOCKS, PENNY_STOCKS
     from datetime import datetime, timedelta
     import pytz
-    from .recommendation_engine import recommendation_engine
     
     symbol = symbol.upper()
     ist = pytz.timezone('Asia/Kolkata')
     now = datetime.now(ist)
     
-    # Get stock info from our database
-    stock_info = next((s for s in NSE_STOCKS if s["symbol"] == symbol), None)
-    
-    # Get current quote
-    quote = await stock_api.get_stock_quote(symbol)
-    
-    # Calculate targets
-    targets = await stock_api.calculate_targets(symbol)
-    
-    # Get category
-    if symbol in LARGE_CAP_STOCKS:
-        category = "Large Cap"
-    elif symbol in MID_CAP_STOCKS:
-        category = "Mid Cap"
-    elif symbol in SMALL_CAP_STOCKS:
-        category = "Small Cap"
-    elif symbol in PENNY_STOCKS:
-        category = "Penny Stock"
-    else:
-        category = "Unknown"
-    
-    # Get price history for chart (last 30 days from Yahoo Finance)
-    chart_data = await get_price_chart_data(symbol)
-    
-    # Get related news (last 7 days)
-    week_ago = now - timedelta(days=7)
-    news = db.query(MarketNews).filter(
-        MarketNews.extracted_stocks.contains([symbol]),
-        MarketNews.created_at >= week_ago
-    ).order_by(MarketNews.created_at.desc()).limit(10).all()
-    
-    ai_enabled = db.query(Config).filter(Config.key == "ai_features_enabled").first()
-    is_ai_on = ai_enabled and ai_enabled.value == "true"
+    try:
+        # Import optional modules with fallbacks
+        try:
+            from .analyzer import LARGE_CAP_STOCKS, MID_CAP_STOCKS, SMALL_CAP_STOCKS, PENNY_STOCKS
+        except Exception:
+            LARGE_CAP_STOCKS = MID_CAP_STOCKS = SMALL_CAP_STOCKS = PENNY_STOCKS = []
+        
+        try:
+            from .recommendation_engine import recommendation_engine
+        except Exception as e:
+            logger.warning(f"Could not import recommendation_engine: {e}")
+            recommendation_engine = None
+        
+        # Get stock info from our database
+        stock_info = next((s for s in NSE_STOCKS if s["symbol"] == symbol), None)
+        
+        # Get current quote
+        quote = None
+        try:
+            quote = await stock_api.get_stock_quote(symbol)
+        except Exception as e:
+            logger.warning(f"Quote fetch failed for {symbol}: {e}")
+        
+        # Calculate targets
+        targets = {}
+        try:
+            targets = await stock_api.calculate_targets(symbol)
+        except Exception as e:
+            logger.warning(f"Target calculation failed for {symbol}: {e}")
+        
+        # Get category
+        if symbol in LARGE_CAP_STOCKS:
+            category = "Large Cap"
+        elif symbol in MID_CAP_STOCKS:
+            category = "Mid Cap"
+        elif symbol in SMALL_CAP_STOCKS:
+            category = "Small Cap"
+        elif symbol in PENNY_STOCKS:
+            category = "Penny Stock"
+        else:
+            category = "Unknown"
+        
+        # Get price history for chart (last 30 days from Yahoo Finance)
+        chart_data = {"prices": [], "labels": [], "closes": []}
+        try:
+            chart_data = await get_price_chart_data(symbol)
+        except Exception as e:
+            logger.warning(f"Chart data fetch failed for {symbol}: {e}")
+        
+        # Get related news (last 7 days) — use text search for SQLite compatibility
+        news = []
+        try:
+            week_ago = now - timedelta(days=7)
+            news = db.query(MarketNews).filter(
+                MarketNews.created_at >= week_ago
+            ).order_by(MarketNews.created_at.desc()).limit(50).all()
+            # Filter in Python for symbol match (SQLite JSON contains is unreliable)
+            news = [n for n in news if n.extracted_stocks and symbol in n.extracted_stocks][:10]
+        except Exception as e:
+            logger.warning(f"News query failed for {symbol}: {e}")
+        
+        ai_enabled = db.query(Config).filter(Config.key == "ai_features_enabled").first()
+        is_ai_on = ai_enabled and ai_enabled.value == "true"
 
-    # Get recommendations for this stock (Only if AI enabled)
-    recs = []
-    if is_ai_on:
-        recs = db.query(Recommendation).filter(
-            Recommendation.symbol == symbol
-        ).order_by(Recommendation.created_at.desc()).limit(7).all()
-    
-    # Get telegram messages mentioning this stock
-    messages = db.query(TelegramMessage).filter(
-        TelegramMessage.text.ilike(f'%{symbol}%')
-    ).order_by(TelegramMessage.created_at.desc()).limit(5).all()
-    
-    # Calculate key ratios (simulated - in production would come from API)
-    key_ratios = get_key_ratios(symbol, quote)
-    
-    # Prepare historical data
-    formatted_history = chart_data.get('prices', []) if chart_data else []
-    
-    # Helper to convert news objects to dicts
-    news_items = [{
-        "title": n.title,
-        "sentiment": n.sentiment
-    } for n in news]
-    
-    # Helper for sentiment data
-    sentiment_data = {'bullish': 0, 'bearish': 0, 'neutral': 0}
-    
-    # Always generate algorithmic recommendation (Rule-based, not LLM)
-    advanced_recommendation = await recommendation_engine.generate_recommendation(
-        symbol=symbol,
-        quote=quote,
-        historical_data=formatted_history,
-        fundamentals=key_ratios,
-        sentiment_data=sentiment_data,
-        news_items=news_items
-    )
-    
-    # External links
-    external_links = {
-        "screener": f"https://www.screener.in/company/{symbol}/",
-        "nse": f"https://www.nseindia.com/get-quotes/equity?symbol={symbol}",
-        "bse": f"https://www.google.com/search?q=site:bseindia.com+{symbol}+stock",
-        "moneycontrol": f"https://www.google.com/search?q=site:moneycontrol.com+{symbol}+stock+price",
-        "tradingview": f"https://www.tradingview.com/symbols/NSE-{symbol}/"
-    }
-    
-    return {
-        "symbol": symbol,
-        "name": stock_info["name"] if stock_info else symbol,
-        "sector": stock_info["sector"] if stock_info else None,
-        "category": category,
-        "ai_enabled": is_ai_on,
+        # Get recommendations for this stock (Only if AI enabled)
+        recs = []
+        if is_ai_on:
+            try:
+                recs = db.query(Recommendation).filter(
+                    Recommendation.symbol == symbol
+                ).order_by(Recommendation.created_at.desc()).limit(7).all()
+            except Exception as e:
+                logger.warning(f"Recommendations query failed for {symbol}: {e}")
         
-        # Price data
-        "current_price": quote.get("price") if quote else None,
-        "change": quote.get("change") if quote else None,
-        "change_percent": quote.get("change_percent") if quote else None,
-        "open": quote.get("open") if quote else None,
-        "high": quote.get("high") if quote else None,
-        "low": quote.get("low") if quote else None,
-        "prev_close": quote.get("close") if quote else None,
-        "volume": quote.get("volume") if quote else None,
+        # Get telegram messages mentioning this stock
+        messages = []
+        try:
+            messages = db.query(TelegramMessage).filter(
+                TelegramMessage.text.ilike(f'%{symbol}%')
+            ).order_by(TelegramMessage.created_at.desc()).limit(5).all()
+        except Exception as e:
+            logger.warning(f"Telegram messages query failed for {symbol}: {e}")
         
-        # Targets
-        "target_price": targets.get("target_price"),
-        "stop_loss": targets.get("stop_loss"),
-        "potential_gain": targets.get("potential_gain_percent"),
-        "potential_loss": targets.get("potential_loss_percent"),
-        "target_reasoning": targets.get("reasoning"),
+        # Calculate key ratios
+        key_ratios = get_key_ratios(symbol, quote)
         
-        # Chart data (for rendering price history)
-        "chart_data": chart_data,
+        # Prepare historical data
+        formatted_history = chart_data.get('prices', []) if chart_data else []
         
-        # Key ratios
-        "ratios": key_ratios,
-        
-        # Related news
-        "news": [{
+        # Helper to convert news objects to dicts
+        news_items = [{
             "title": n.title,
-            "link": n.link,
-            "source": n.source,
-            "sentiment": n.sentiment,
-            "published_at": n.published_at.isoformat() if n.published_at else None
-        } for n in news],
+            "sentiment": n.sentiment
+        } for n in news]
         
-        # Recommendations
-        "recommendations": [{
-            "timeframe": r.timeframe,
-            "action": r.action,
-            "confidence": r.confidence,
-            "reasoning": r.reasoning
-        } for r in recs],
+        # Helper for sentiment data
+        sentiment_data = {'bullish': 0, 'bearish': 0, 'neutral': 0}
         
-        # Telegram signals
-        "signals": [{
-            "channel": m.channel_name,
-            "text": m.text[:200] if m.text else None,
-            "date": m.created_at.isoformat() if m.created_at else None
-        } for m in messages],
+        # Always generate algorithmic recommendation (Rule-based, not LLM)
+        advanced_recommendation = {
+            'overall_signal': 'HOLD',
+            'signal_class': 'hold',
+            'composite_score': 50.0,
+            'confidence': 0,
+            'error': 'Recommendation engine unavailable'
+        }
+        if recommendation_engine:
+            try:
+                advanced_recommendation = await recommendation_engine.generate_recommendation(
+                    symbol=symbol,
+                    quote=quote,
+                    historical_data=formatted_history,
+                    fundamentals=key_ratios,
+                    sentiment_data=sentiment_data,
+                    news_items=news_items
+                )
+            except Exception as rec_err:
+                logger.error(f"Recommendation engine failed for {symbol}: {rec_err}")
         
         # External links
-        "external_links": external_links,
+        external_links = {
+            "screener": f"https://www.screener.in/company/{symbol}/",
+            "nse": f"https://www.nseindia.com/get-quotes/equity?symbol={symbol}",
+            "bse": f"https://www.google.com/search?q=site:bseindia.com+{symbol}+stock",
+            "moneycontrol": f"https://www.google.com/search?q=site:moneycontrol.com+{symbol}+stock+price",
+            "tradingview": f"https://www.tradingview.com/symbols/NSE-{symbol}/"
+        }
         
-        # Advanced AI Recommendation
-        "advanced_recommendation": advanced_recommendation,
-        
-        "last_updated": now.isoformat()
-    }
+        return {
+            "symbol": symbol,
+            "name": stock_info["name"] if stock_info else symbol,
+            "sector": stock_info.get("sector") if stock_info else None,
+            "category": category,
+            "ai_enabled": is_ai_on,
+            
+            # Price data
+            "current_price": quote.get("price") if quote else None,
+            "change": quote.get("change") if quote else None,
+            "change_percent": quote.get("change_percent") if quote else None,
+            "open": quote.get("open") if quote else None,
+            "high": quote.get("high") if quote else None,
+            "low": quote.get("low") if quote else None,
+            "prev_close": quote.get("close") if quote else None,
+            "volume": quote.get("volume") if quote else None,
+            
+            # Targets
+            "target_price": targets.get("target_price") if targets else None,
+            "stop_loss": targets.get("stop_loss") if targets else None,
+            "potential_gain": targets.get("potential_gain_percent") if targets else None,
+            "potential_loss": targets.get("potential_loss_percent") if targets else None,
+            "target_reasoning": targets.get("reasoning") if targets else None,
+            
+            # Chart data (for rendering price history)
+            "chart_data": chart_data,
+            
+            # Key ratios
+            "ratios": key_ratios,
+            
+            # Related news
+            "news": [{
+                "title": n.title,
+                "link": n.link,
+                "source": n.source,
+                "sentiment": n.sentiment,
+                "published_at": n.published_at.isoformat() if n.published_at else None
+            } for n in news],
+            
+            # Recommendations
+            "recommendations": [{
+                "timeframe": r.timeframe,
+                "action": r.action,
+                "confidence": r.confidence,
+                "reasoning": r.reasoning
+            } for r in recs],
+            
+            # Telegram signals
+            "signals": [{
+                "channel": m.channel_name,
+                "text": m.text[:200] if m.text else None,
+                "date": m.created_at.isoformat() if m.created_at else None
+            } for m in messages],
+            
+            # External links
+            "external_links": external_links,
+            
+            # Advanced AI Recommendation
+            "advanced_recommendation": advanced_recommendation,
+            
+            "last_updated": now.isoformat()
+        }
+    
+    except Exception as e:
+        logger.error(f"Stock detail endpoint failed for {symbol}: {e}", exc_info=True)
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error": f"Failed to load stock details for {symbol}",
+                "detail": str(e),
+                "symbol": symbol
+            }
+        )
 
 
 async def get_price_chart_data(symbol: str) -> dict:
@@ -1908,28 +1963,35 @@ async def get_price_chart_data(symbol: str) -> dict:
 
 
 def get_key_ratios(symbol: str, quote: dict) -> dict:
-    """Get key financial ratios for stock (simulated for NSE stocks)"""
-    import random
+    """Get key financial ratios for stock.
     
-    # In production, these would come from Screener API or financial data provider
-    # For now, generate reasonable estimates based on market cap category
+    Note: In production, these should come from Screener API or financial data provider.
+    Returns None for unavailable data rather than misleading random values.
+    """
+    price = quote.get("price", 0) if quote else 0
     
-    price = quote.get("price", 100) if quote else 100
+    pe_val = quote.get("pe_ratio") if quote else None
+    pb_val = quote.get("pb_ratio") if quote else None
     
-    # Simulated ratios based on typical Indian market ranges
     ratios = {
-        "pe_ratio": round(random.uniform(12, 45), 2),
-        "pb_ratio": round(random.uniform(1.5, 8), 2),
-        "dividend_yield": round(random.uniform(0.2, 3.5), 2),
-        "roe": round(random.uniform(8, 25), 2),
-        "roce": round(random.uniform(10, 30), 2),
-        "debt_to_equity": round(random.uniform(0.1, 1.5), 2),
-        "eps": round(price / random.uniform(15, 40), 2),
-        "book_value": round(price / random.uniform(2, 6), 2),
-        "face_value": 10 if random.random() > 0.3 else 1,
-        "market_cap": None,  # Would need additional data
-        "52w_high": round(price * random.uniform(1.1, 1.5), 2),
-        "52w_low": round(price * random.uniform(0.6, 0.9), 2),
+        # Display keys (for frontend)
+        "pe_ratio": pe_val,
+        "pb_ratio": pb_val,
+        "dividend_yield": None,  # Requires financial data API
+        "roe": None,
+        "roce": None,
+        "debt_to_equity": None,
+        "eps": None,
+        "book_value": None,
+        "face_value": None,
+        "market_cap": quote.get("marketCap") if quote else None,
+        "52w_high": quote.get("yearHigh") or quote.get("52w_high") if quote else None,
+        "52w_low": quote.get("yearLow") or quote.get("52w_low") if quote else None,
+        # Engine keys (for recommendation_engine compatibility)
+        "pe": pe_val or 0,
+        "pb": pb_val or 0,
+        "de": 0,
+        "div_yield": 0,
     }
     
     return ratios
@@ -2410,7 +2472,7 @@ async def analyze_market(db: Session = Depends(get_db)):
 
 # ============== Screener API ==============
 
-from .screener import stock_screener
+from .screener import stock_screener, INDICATOR_GLOSSARY, CATEGORY_METADATA
 from .expert_engine import expert_engine
 
 @app.get("/api/screens")
@@ -2431,7 +2493,9 @@ async def get_all_screens():
         "total": len(screens),
         "screens": screens,
         "categories": categories,
-        "strategy_recommendation": strategy_recommendation
+        "strategy_recommendation": strategy_recommendation,
+        "glossary": INDICATOR_GLOSSARY,
+        "category_metadata": CATEGORY_METADATA
     }
 
 

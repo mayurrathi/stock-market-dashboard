@@ -476,6 +476,195 @@ STOCK_SCREENS = {
     },
 }
 
+# ===== BEGINNER-FRIENDLY INDICATOR GLOSSARY =====
+INDICATOR_GLOSSARY = {
+    "pe": {
+        "name": "P/E Ratio (Price to Earnings)",
+        "simple": "How many years of profits you're paying for when you buy this stock.",
+        "example": "If P/E = 20, you're paying ₹20 for every ₹1 the company earns per year.",
+        "good_range": "10–25 (lower = cheaper)",
+        "warning_range": "> 40 (expensive)",
+        "icon": "💰",
+    },
+    "pb": {
+        "name": "P/B Ratio (Price to Book Value)",
+        "simple": "Are you paying more or less than the company's actual asset value?",
+        "example": "P/B = 0.8 means you're buying ₹1 of assets for just ₹0.80 — a potential bargain.",
+        "good_range": "< 3 (reasonable)",
+        "warning_range": "> 6 (very expensive)",
+        "icon": "📖",
+    },
+    "roe": {
+        "name": "ROE (Return on Equity)",
+        "simple": "How much profit the company makes with shareholders' money. Higher = better management.",
+        "example": "ROE = 20% means for every ₹100 invested by shareholders, the company earns ₹20 profit.",
+        "good_range": "> 15% (good), > 25% (excellent)",
+        "warning_range": "< 8% (poor)",
+        "icon": "📈",
+    },
+    "roce": {
+        "name": "ROCE (Return on Capital Employed)",
+        "simple": "How efficiently ALL capital (equity + debt) is used. Includes borrowed money too.",
+        "example": "ROCE = 25% means any capital put into this business generates 25% returns.",
+        "good_range": "> 18% (efficient), > 25% (outstanding)",
+        "warning_range": "< 10% (inefficient)",
+        "icon": "⚡",
+    },
+    "de": {
+        "name": "D/E Ratio (Debt to Equity)",
+        "simple": "How much the company has borrowed vs what shareholders own. Low = safer.",
+        "example": "D/E = 0.5 means for every ₹100 of shareholder money, the company owes ₹50.",
+        "good_range": "< 0.5 (low debt), < 1 (manageable)",
+        "warning_range": "> 1.5 (heavily indebted)",
+        "icon": "🏦",
+    },
+    "div_yield": {
+        "name": "Dividend Yield",
+        "simple": "The yearly cash payout you receive just for holding the stock, as a % of its price.",
+        "example": "Yield = 3% on a ₹100 stock means you get ₹3 per year in cash, regardless of stock price movement.",
+        "good_range": "> 2% (income stock)",
+        "warning_range": "Very high yield (> 8%) could mean the price has crashed",
+        "icon": "💵",
+    },
+    "mcap": {
+        "name": "Market Cap (Market Capitalization)",
+        "simple": "The total value of all the company's shares. Tells you how 'big' the company is.",
+        "example": "Large Cap = top ~100 companies (like Reliance, TCS). Safer but slower growth.",
+        "good_range": "Large Cap (safest), Mid Cap (balanced)",
+        "warning_range": "Penny Stock (very risky, can lose everything)",
+        "icon": "🏢",
+    },
+    "rsi": {
+        "name": "RSI (Relative Strength Index)",
+        "simple": "Measures if a stock has risen too fast (overbought) or fallen too fast (oversold). Range: 0–100.",
+        "example": "RSI < 30 = oversold (possible bounce). RSI > 70 = overbought (might drop).",
+        "good_range": "30–70 (normal zone)",
+        "warning_range": "< 30 or > 70",
+        "icon": "📊",
+    },
+    "macd": {
+        "name": "MACD (Moving Average Convergence Divergence)",
+        "simple": "Shows if a stock's momentum is getting stronger or weaker.",
+        "example": "MACD crossing above signal line = bullish signal. Below = bearish.",
+        "good_range": "MACD > 0 (upward momentum)",
+        "warning_range": "MACD < 0 (downward momentum)",
+        "icon": "📉",
+    },
+    "beta": {
+        "name": "Beta",
+        "simple": "How much the stock moves compared to the overall market.",
+        "example": "Beta = 1.5 means if the market rises 10%, this stock rises ~15% (but also falls 15% when market drops).",
+        "good_range": "< 1 (less volatile, defensive)",
+        "warning_range": "> 1.5 (very volatile)",
+        "icon": "🎢",
+    },
+}
+
+# Category-level metadata for the screener
+CATEGORY_METADATA = {
+    "Value": {
+        "icon": "💰",
+        "description": "Find stocks trading below their true worth — perfect for patient investors.",
+        "default_difficulty": "Beginner",
+        "default_risk": "Low",
+        "tip": "Value investing requires patience. Cheap stocks may take 1-3 years to realize their value.",
+    },
+    "Growth": {
+        "icon": "📈",
+        "description": "Fast-growing companies that reinvest profits to expand rapidly.",
+        "default_difficulty": "Intermediate",
+        "default_risk": "Medium",
+        "tip": "Growth stocks can be volatile. Don't panic if they drop 20-30% — it's normal.",
+    },
+    "Quality": {
+        "icon": "💎",
+        "description": "Premium businesses with strong fundamentals — the backbone of any portfolio.",
+        "default_difficulty": "Beginner",
+        "default_risk": "Low",
+        "tip": "Quality stocks rarely come cheap. Buying at ANY price is better than not owning them.",
+    },
+    "Technical": {
+        "icon": "📊",
+        "description": "Chart-based signals for timing entries — best used WITH fundamentals.",
+        "default_difficulty": "Advanced",
+        "default_risk": "High",
+        "tip": "Technical signals work best in the short term. Always confirm with fundamentals for long-term bets.",
+    },
+    "Thematic": {
+        "icon": "🏛️",
+        "description": "Bet on sectors and macro themes like infra, EV, defense, or digital India.",
+        "default_difficulty": "Intermediate",
+        "default_risk": "Medium",
+        "tip": "Thematic investing is cyclical. Enter when the theme is out of favor, not when it's trending.",
+    },
+    "Safety": {
+        "icon": "🛡️",
+        "description": "Low-risk, stable stocks for protecting capital during market uncertainty.",
+        "default_difficulty": "Beginner",
+        "default_risk": "Low",
+        "tip": "Safety screens are ideal during market crashes or when you're unsure about the direction.",
+    },
+}
+
+# Per-screen difficulty and risk overrides (when different from category defaults)
+SCREEN_OVERRIDES = {
+    # Value screens
+    "low_pe": {"difficulty": "Beginner", "risk": "Low", "why": "Simple filter — just look for cheap P/E. Great starting point."},
+    "low_pb": {"difficulty": "Intermediate", "risk": "Medium", "why": "Low P/B can mean undervalued OR a dying business. Research needed."},
+    "low_pe_high_roe": {"difficulty": "Beginner", "risk": "Low", "why": "The best beginner screen — combines cheapness with quality."},
+    "graham_number": {"difficulty": "Intermediate", "risk": "Low", "why": "Classic formula from the father of value investing."},
+    "high_dividend_yield": {"difficulty": "Beginner", "risk": "Low", "why": "Easy to understand — you get paid cash for holding!"},
+    "dividend_aristocrats": {"difficulty": "Beginner", "risk": "Low", "why": "Reliable income over time."},
+    "peg_undervalued": {"difficulty": "Intermediate", "risk": "Low", "why": "Factors in growth rate, not just price."},
+    "deep_value": {"difficulty": "Advanced", "risk": "High", "why": "Extreme bargain hunting. Many are 'value traps' — cheap for a reason."},
+    "ev_ebitda_low": {"difficulty": "Advanced", "risk": "Medium", "why": "Enterprise value is a sophisticated metric."},
+    "contrarian_value": {"difficulty": "Advanced", "risk": "High", "why": "You're betting against the market. Requires conviction."},
+    # Growth screens
+    "garp": {"difficulty": "Intermediate", "risk": "Medium", "why": "Balanced approach — growth without overpaying."},
+    "high_roe": {"difficulty": "Beginner", "risk": "Low", "why": "Simple and powerful — high ROE = well-run company."},
+    "high_roce": {"difficulty": "Beginner", "risk": "Low", "why": "Like ROE but even more comprehensive."},
+    "profit_growth": {"difficulty": "Intermediate", "risk": "Medium", "why": "Dual filter ensures profitable growth."},
+    "compounders": {"difficulty": "Beginner", "risk": "Low", "why": "The best 'set and forget' screen for beginners."},
+    "small_cap_growth": {"difficulty": "Advanced", "risk": "High", "why": "Small caps can double — or halve. Not for beginners."},
+    "emerging_blue_chips": {"difficulty": "Intermediate", "risk": "Medium", "why": "Catching future large caps while they're still affordable."},
+    "earnings_momentum": {"difficulty": "Intermediate", "risk": "Medium", "why": "Riding the earnings acceleration wave."},
+    # Quality screens
+    "debt_free": {"difficulty": "Beginner", "risk": "Low", "why": "No debt = no bankruptcy risk. Period."},
+    "cash_rich": {"difficulty": "Beginner", "risk": "Low", "why": "Companies sitting on cash have options and safety."},
+    "consistent_dividend": {"difficulty": "Beginner", "risk": "Low", "why": "Track record of sharing profits with shareholders."},
+    "blue_chip": {"difficulty": "Beginner", "risk": "Low", "why": "The safest stocks for first-time investors."},
+    "moat_companies": {"difficulty": "Intermediate", "risk": "Low", "why": "Companies with competitive advantages."},
+    "management_quality": {"difficulty": "Advanced", "risk": "Low", "why": "Subtler metric — compares ROCE vs ROE."},
+    "capital_efficient": {"difficulty": "Intermediate", "risk": "Low", "why": "Capital-light businesses grow faster."},
+    "profit_machines": {"difficulty": "Intermediate", "risk": "Low", "why": "The cream of the crop — all quality metrics firing."},
+    # Technical screens
+    "golden_cross": {"difficulty": "Advanced", "risk": "Medium", "why": "Classic chart pattern for long-term trend reversal."},
+    "death_cross_avoid": {"difficulty": "Advanced", "risk": "Low", "why": "A filter to AVOID — keeps you out of downtrends."},
+    "rsi_oversold": {"difficulty": "Advanced", "risk": "High", "why": "Short-term bounce play. Timing is everything."},
+    "rsi_overbought": {"difficulty": "Advanced", "risk": "Medium", "why": "Identifies stocks that may be due for a pullback."},
+    "breakout_52w_high": {"difficulty": "Advanced", "risk": "High", "why": "Momentum play — buying strength."},
+    "near_52w_low": {"difficulty": "Advanced", "risk": "High", "why": "Contrarian play — buying weakness. Risky."},
+    "high_volume_surge": {"difficulty": "Advanced", "risk": "High", "why": "Volume spikes indicate institutional activity."},
+    "price_momentum": {"difficulty": "Advanced", "risk": "High", "why": "Riding winners. Requires quick exits."},
+    # Safety screens
+    "low_beta": {"difficulty": "Beginner", "risk": "Low", "why": "Less volatile = less stressful to hold."},
+    "recession_proof": {"difficulty": "Beginner", "risk": "Low", "why": "People always need food, medicine, and power."},
+    "high_interest_coverage": {"difficulty": "Intermediate", "risk": "Low", "why": "Ensures the company can service its debt easily."},
+    "stable_earnings": {"difficulty": "Beginner", "risk": "Low", "why": "Predictable profits = predictable stock behavior."},
+    "low_volatility": {"difficulty": "Beginner", "risk": "Low", "why": "Sleep-well-at-night stocks."},
+    "safe_haven": {"difficulty": "Beginner", "risk": "Low", "why": "The ultimate defensive play."},
+    # Thematic screens
+    "fii_favorites": {"difficulty": "Intermediate", "risk": "Medium", "why": "Foreign institutions have deep research teams."},
+    "dii_accumulation": {"difficulty": "Intermediate", "risk": "Medium", "why": "Domestic funds provide a safety net."},
+    "it_sector": {"difficulty": "Intermediate", "risk": "Medium", "why": "Global demand for IT services."},
+    "banking_finance": {"difficulty": "Intermediate", "risk": "Medium", "why": "Proxy for economic growth."},
+    "fmcg_consumer": {"difficulty": "Beginner", "risk": "Low", "why": "Everyday products people can't stop buying."},
+    "infrastructure_play": {"difficulty": "Intermediate", "risk": "Medium", "why": "Government capex cycle play."},
+    "defense_psu": {"difficulty": "Advanced", "risk": "Medium", "why": "Policy-dependent. Needs tracking of govt budgets."},
+    "ev_green_energy": {"difficulty": "Advanced", "risk": "High", "why": "Futuristic but speculative. Many unproven companies."},
+    "rural_consumption": {"difficulty": "Intermediate", "risk": "Medium", "why": "Monsoon and rural income dependent."},
+    "export_oriented": {"difficulty": "Intermediate", "risk": "Medium", "why": "Currency play — benefits when rupee weakens."},
+}
 
 
 class StockScreener:
@@ -486,18 +675,27 @@ class StockScreener:
         self.stock_data = STOCK_DATA
     
     def get_all_screens(self) -> List[Dict]:
-        """Get list of all available screens with full definitions"""
+        """Get list of all available screens with full definitions and beginner metadata"""
         result = []
         for screen_id, screen in self.screens.items():
+            cat = screen["category"]
+            cat_meta = CATEGORY_METADATA.get(cat, {})
+            overrides = SCREEN_OVERRIDES.get(screen_id, {})
+            
             result.append({
                 "id": screen_id,
                 "name": screen["name"],
                 "description": screen["description"],
-                "category": screen["category"],
+                "category": cat,
                 "definition": screen.get("definition", screen["description"]),
                 "summary": screen.get("summary", ""),
                 "fresh_entry_rating": screen.get("fresh_entry_rating", 3),
-                "recommended_for_fresh_entry": screen.get("recommended_for_fresh_entry", False)
+                "recommended_for_fresh_entry": screen.get("recommended_for_fresh_entry", False),
+                # Beginner-friendly additions
+                "difficulty": overrides.get("difficulty", cat_meta.get("default_difficulty", "Intermediate")),
+                "risk_level": overrides.get("risk", cat_meta.get("default_risk", "Medium")),
+                "why_it_matters": overrides.get("why", ""),
+                "category_tip": cat_meta.get("tip", ""),
             })
         return sorted(result, key=lambda x: (x["category"], x["name"]))
     

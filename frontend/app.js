@@ -770,7 +770,7 @@ async function loadAllStarPicksPage(forceRefresh = false) {
             }
 
             container.innerHTML = data.picks.map((pick, index) => `
-            < div class= "allstar-card ${pick.action.toLowerCase()}" data - symbol="${pick.symbol}" style = "cursor: pointer; position: relative;" >
+            <div class="allstar-card ${pick.action.toLowerCase()}" data-symbol="${pick.symbol}" style="cursor: pointer; position: relative;">
                     <button onclick="toggleWatchlist('${pick.symbol}', event)" title="Add to Watchlist" style="position: absolute; top: 8px; right: 8px; width: 28px; height: 28px; border-radius: 50%; border: none; background: rgba(255,255,255,0.1); color: #fbbf24; cursor: pointer; font-size: 14px;">⭐</button>
                     <div class="allstar-rank">#${index + 1}</div>
                     <div class="allstar-main">
@@ -811,7 +811,7 @@ async function loadAllStarPicksPage(forceRefresh = false) {
                         </div>
                     ` : ''
                 }
-                </div >
+                </div>
                 `).join('');
 
         } else {
@@ -857,7 +857,7 @@ async function loadExitTracker() {
                 const gainOperator = pick.performance_pct >= 0 ? '+' : '';
 
                 return `
-            < div class= "allstar-card" data - symbol="${pick.symbol}" style = "cursor: pointer; position: relative; ${bgStyle} padding-bottom: 8px;" >
+            <div class="allstar-card" data-symbol="${pick.symbol}" style="cursor: pointer; position: relative; ${bgStyle} padding-bottom: 8px;">
                      <div style="position: absolute; top: 10px; right: 10px; font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 4px; background: ${isSell ? 'rgba(239,68,68,0.2)' : 'rgba(16,185,129,0.2)'}; color: ${actionColor};">
                         ${pick.current_action}
                      </div>
@@ -893,7 +893,7 @@ async function loadExitTracker() {
                     </div>
                     ` : ''
                     }
-                </div >
+                </div>
             `;
             }).join('');
         } else {
@@ -912,7 +912,7 @@ let currentNewsPage = 1;
 function renderPaginationControls(currentPage, totalPages, type) {
     const fn = type === 'signals' ? 'loadLiveSignals' : 'loadNews';
     return `
-            < div class="pagination-controls" style = "display: flex; justify-content: center; align-items: center; gap: 16px; margin-top: 24px; padding-top: 16px; border-top: 1px dashed var(--border-color);" >
+            <div class="pagination-controls" style="display: flex; justify-content: center; align-items: center; gap: 16px; margin-top: 24px; padding-top: 16px; border-top: 1px dashed var(--border-color);">
             <button class="btn btn-secondary" ${currentPage <= 1 ? 'disabled style="opacity:0.5; cursor:not-allowed;"' : ''} onclick="${fn}(${currentPage - 1})">
                 ← Previous
             </button>
@@ -920,7 +920,7 @@ function renderPaginationControls(currentPage, totalPages, type) {
             <button class="btn btn-secondary" ${currentPage >= totalPages ? 'disabled style="opacity:0.5; cursor:not-allowed;"' : ''} onclick="${fn}(${currentPage + 1})">
                 Next →
             </button>
-        </div >
+        </div>
             `;
 }
 
@@ -933,7 +933,7 @@ async function loadLiveSignals(page = 1) {
     if (!container) return;
 
     try {
-        const data = await apiCall(`/ api / signals / live ? page = ${page}& limit=40 & days=7`);
+        const data = await apiCall(`/api/signals/live?page=${page}&limit=40&days=7`);
 
         if (data.signals && data.signals.length > 0) {
             countEl.textContent = data.count;
@@ -951,7 +951,7 @@ async function loadLiveSignals(page = 1) {
                 const attentionStyle = signal.requires_attention ? 'border: 2px solid var(--accent-primary); animation: pulse 2s infinite;' : '';
 
                 return `
-            < div class="signal-card" style = "min-width: 280px; background: var(--bg-card); border-radius: 12px; padding: 12px; ${attentionStyle}" data - signal - id="${signal.id || ''}" >
+            <div class="signal-card" style="min-width: 280px; background: var(--bg-card); border-radius: 12px; padding: 12px; ${attentionStyle}" data-signal-id="${signal.id || ''}">
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                             <span style="font-size: 11px; color: var(--text-muted);">${signal.channel_name}</span>
                             <div style="display: flex; align-items: center; gap: 6px;">
@@ -979,7 +979,7 @@ async function loadLiveSignals(page = 1) {
                                 </button>
                             </div>
                         </div>
-                    </div >
+                    </div>
             `;
             }).join('');
 
@@ -1141,23 +1141,23 @@ function setupUniversalCardClicks() {
 
 async function loadRecommendations() {
     try {
-        const data = await apiCall(`/ api / recommendations ? timeframe = ${currentTimeframe} `);
+        const data = await apiCall(`/api/recommendations?timeframe=${currentTimeframe}`);
         const grid = document.getElementById('recommendationsGrid');
 
         const recs = data.recommendations[currentTimeframe] || [];
 
         if (recs.length === 0) {
             grid.innerHTML = `
-            < div class="empty-state" >
+            <div class="empty-state">
                     <span>🔍</span>
                     <p>No recommendations for this timeframe. Click "Analyze & Recommend" to generate.</p>
-                </div >
+                </div>
             `;
             return;
         }
 
         grid.innerHTML = recs.map(rec => `
-            < div class="rec-card" data - symbol="${rec.symbol}" style = "cursor: pointer;" >
+            <div class="rec-card" data-symbol="${rec.symbol}" style="cursor: pointer;">
                 <div class="rec-header">
                     <span class="rec-symbol">${rec.symbol}</span>
                     <span class="rec-action ${rec.action}">${rec.action}</span>
@@ -1169,7 +1169,7 @@ async function loadRecommendations() {
                         <small style="color: var(--text-muted); font-size: 11px;">${(rec.confidence || 0).toFixed(1)}% confidence</small>
                     </div>
                     <div class="rec-reasoning">${rec.reasoning || 'No details available'}</div>
-                </div >
+                </div>
             `).join('');
 
     } catch (error) {
@@ -1182,21 +1182,21 @@ async function loadRecommendations() {
 async function loadMessages() {
     try {
         const params = getTimeParams();
-        const data = await apiCall(`/ api / messages ? ${params}& limit=50`);
+        const data = await apiCall(`/api/messages?${params}&limit=50`);
         const list = document.getElementById('messagesList');
 
         if (data.messages.length === 0) {
             list.innerHTML = `
-            < div class="empty-state" >
+            <div class="empty-state">
                     <span>💬</span>
                     <p>No signals in this time range.</p>
-                </div >
+                </div>
             `;
             return;
         }
 
         list.innerHTML = data.messages.map(msg => `
-            < div class="message-card" data - symbol="${msg.extracted_stocks?.length ? msg.extracted_stocks[0] : ''}" style = "${msg.extracted_stocks?.length ? 'cursor: pointer;' : ''}" >
+            <div class="message-card" data-symbol="${msg.extracted_stocks?.length ? msg.extracted_stocks[0] : ''}" style="${msg.extracted_stocks?.length ? 'cursor: pointer;' : ''}">
                 <div class="message-header">
                     <span class="message-channel">${msg.channel_name || 'Unknown Channel'}</span>
                     <span class="message-time">${formatTime(msg.created_at)}</span>
@@ -1209,7 +1209,7 @@ async function loadMessages() {
                 ` : ''
             }
                 ${msg.sentiment ? `<span class="sentiment-badge ${msg.sentiment}">${msg.sentiment}</span>` : ''}
-            </div >
+            </div>
             `).join('');
 
     } catch (error) {
@@ -1223,21 +1223,21 @@ async function loadNews(page = 1) {
     currentNewsPage = page;
     try {
         const params = getTimeParams();
-        const data = await apiCall(`/ api / news ? ${params}& page=${page}& limit=40`);
+        const data = await apiCall(`/api/news?${params}&page=${page}&limit=40`);
         const list = document.getElementById('newsList');
 
         if (data.news.length === 0) {
             list.innerHTML = `
-            < div class="empty-state" >
+            <div class="empty-state">
                     <span>📰</span>
                     <p>No news articles in this time range. Click "Fetch News" to load latest.</p>
-                </div >
+                </div>
             `;
             return;
         }
 
         list.innerHTML = data.news.map(item => `
-            < div class="news-card" data - symbol="${item.stocks?.length ? item.stocks[0] : ''}" style = "${item.stocks?.length ? 'cursor: pointer;' : ''}" >
+            <div class="news-card" data-symbol="${item.stocks?.length ? item.stocks[0] : ''}" style="${item.stocks?.length ? 'cursor: pointer;' : ''}">
                 <div class="news-header">
                     <span class="news-source">${formatSource(item.source)}</span>
                     <span class="news-time">${formatTime(item.published_at)}</span>
@@ -1253,7 +1253,7 @@ async function loadNews(page = 1) {
                 ` : ''
             }
                 ${item.sentiment ? `<span class="sentiment-badge ${item.sentiment}">${item.sentiment}</span>` : ''}
-            </div >
+            </div>
             `).join('');
 
         // Append Pagination
@@ -1274,7 +1274,7 @@ async function loadRecommendationsFull() {
         const timeframes = ['next_day', 'next_week', 'next_month', '1yr', '2yr', '5yr', '10yr'];
 
         timeframes.forEach(tf => {
-            const container = document.querySelector(`#tf - ${tf} .tf - recs`);
+            const container = document.querySelector(`#tf-${tf} .tf-recs`);
             if (!container) return; // Safety check: skip if container doesn't exist
 
             const recs = data.recommendations[tf] || [];
@@ -1296,7 +1296,7 @@ async function loadRecommendationsFull() {
                     <div class="rec-reasoning-preview" style="font-size: 11px; color: var(--text-secondary); margin-top: 4px; line-height: 1.3; max-height: 32px; overflow: hidden;">
                         ${rec.reasoning ? rec.reasoning.substring(0, 80) + '...' : ''}
                     </div>
-                </div >
+                </div>
             `).join('');
         });
 
@@ -1314,16 +1314,16 @@ async function loadSources() {
 
         if (sources.length === 0) {
             list.innerHTML = `
-            < div class="empty-state" >
+            <div class="empty-state">
                     <span>📡</span>
                     <p>No sources configured. Click "Add Source" to add Telegram channels.</p>
-                </div >
+                </div>
             `;
             return;
         }
 
         list.innerHTML = sources.map(source => `
-            < div class="source-card" >
+            <div class="source-card">
                 <div class="source-header">
                     <span class="source-name">${escapeHtml(source.name)}</span>
                     <span class="source-status ${source.active ? '' : 'inactive'}"></span>
@@ -1336,7 +1336,7 @@ async function loadSources() {
                     <button class="btn btn-secondary" onclick="fetchSource(${source.id})">Fetch</button>
                     <button class="btn btn-secondary" onclick="deleteSource(${source.id})" style="color: var(--danger);">Delete</button>
                 </div>
-            </div >
+            </div>
             `).join('');
 
     } catch (error) {
@@ -1346,12 +1346,12 @@ async function loadSources() {
 
 async function fetchSource(sourceId) {
     try {
-        const result = await apiCall(`/ api / sources / ${sourceId}/fetch`, { method: 'POST' });
-        alert(`Fetched ${result.messages_fetched} messages!`);
+        const result = await apiCall(`/api/sources/${sourceId}/fetch`, { method: 'POST' });
+        showToast(`Fetched ${result.messages_fetched} messages!`, 'success');
         loadSources();
         loadDashboardStats();
     } catch (error) {
-        alert('Failed to fetch: ' + error.message);
+        showToast('Failed to fetch: ' + error.message, 'error');
     }
 }
 
@@ -1362,7 +1362,7 @@ async function deleteSource(sourceId) {
         await apiCall(`/api/sources/${sourceId}`, { method: 'DELETE' });
         loadSources();
     } catch (error) {
-        alert('Failed to delete: ' + error.message);
+        showToast('Failed to delete: ' + error.message, 'error');
     }
 }
 
@@ -1376,11 +1376,11 @@ function setupButtons() {
 
         try {
             const result = await apiCall('/api/news/fetch', { method: 'POST' });
-            alert(`Fetched ${result.articles_fetched} news articles!`);
+            showToast(`Fetched ${result.articles_fetched} news articles!`, 'success');
             loadDashboardStats();
             if (currentSection === 'news') loadNews();
         } catch (error) {
-            alert('Failed to fetch news: ' + error.message);
+            showToast('Failed to fetch news: ' + error.message, 'error');
         } finally {
             btn.disabled = false;
             btn.innerHTML = '<span>📰</span> Fetch News';
@@ -1394,10 +1394,10 @@ function setupButtons() {
 
         try {
             const result = await apiCall('/api/stocks/fetch', { method: 'POST' });
-            alert(`Updated ${result.prices_fetched} stock prices!`);
+            showToast(`Updated ${result.prices_fetched} stock prices!`, 'success');
             loadIndices();
         } catch (error) {
-            alert('Failed to update prices: ' + error.message);
+            showToast('Failed to update prices: ' + error.message, 'error');
         } finally {
             btn.disabled = false;
             btn.innerHTML = '<span>💹</span> Update Prices';
@@ -1413,12 +1413,12 @@ function setupButtons() {
             const params = getTimeParams();
             const result = await apiCall(`/api/analyze?${params}`, { method: 'POST' });
 
-            alert(`Analysis complete!\nMessages analyzed: ${result.analysis.messages_analyzed}\nNews analyzed: ${result.analysis.news_analyzed}\nRecommendations generated: ${result.recommendations.length}`);
+            showToast(`Analysis complete! ${result.recommendations.length} recommendations generated.`, 'success');
 
             loadRecommendations();
             loadDashboardStats();
         } catch (error) {
-            alert('Analysis failed: ' + error.message);
+            showToast('Analysis failed: ' + error.message, 'error');
         } finally {
             btn.disabled = false;
             btn.innerHTML = '<span>🔍</span> Analyze & Recommend';
@@ -1471,7 +1471,7 @@ function setupForms() {
             loadSources();
             loadDashboardStats();
         } catch (error) {
-            alert('Failed to add source: ' + error.message);
+            showToast('Failed to add source: ' + error.message, 'error');
         }
     });
 
@@ -1482,7 +1482,7 @@ function setupForms() {
         const phone = document.getElementById('phoneNumber').value;
 
         if (!apiId || !apiHash || !phone) {
-            alert('Please fill all fields');
+            showToast('Please fill all fields', 'error');
             return;
         }
 
@@ -1497,9 +1497,9 @@ function setupForms() {
             });
 
             document.getElementById('verifySection').classList.remove('hidden');
-            alert('Verification code sent to your Telegram!');
+            showToast('Verification code sent to your Telegram!', 'success');
         } catch (error) {
-            alert('Failed to send code: ' + error.message);
+            showToast('Failed to send code: ' + error.message, 'error');
         }
     });
 
@@ -1508,7 +1508,7 @@ function setupForms() {
         const code = document.getElementById('verifyCode').value;
 
         if (!code) {
-            alert('Please enter the verification code');
+            showToast('Please enter the verification code', 'error');
             return;
         }
 
@@ -1519,15 +1519,15 @@ function setupForms() {
             });
 
             if (result.status === 'authenticated') {
-                alert('Telegram connected successfully!');
+                showToast('Telegram connected successfully!', 'success');
                 checkTelegramStatus();
             } else if (result.status === '2fa_required') {
-                alert('2FA required. Please enter your 2FA password.');
+                showToast('2FA required. Please enter your 2FA password.', 'error');
             } else {
-                alert('Verification failed: ' + result.message);
+                showToast('Verification failed: ' + result.message, 'error');
             }
         } catch (error) {
-            alert('Verification failed: ' + error.message);
+            showToast('Verification failed: ' + error.message, 'error');
         }
     });
 
@@ -2152,9 +2152,6 @@ function renderAdvancedRecommendation(data, aiEnabled = true) {
 
     // Header
     const signalBadge = document.getElementById('recSignalBadge');
-    signalBadge.textContent = data.overall_signal;
-    signalBadge.className = 'signal-badge ' + data.signal_class;
-
     const colors = {
         'strong_buy': '#10b981',
         'buy': '#34d399',
@@ -2164,15 +2161,24 @@ function renderAdvancedRecommendation(data, aiEnabled = true) {
     };
     const color = colors[data.signal_class] || '#6b7280';
 
-    signalBadge.style.backgroundColor = color;
-    signalBadge.style.color = '#fff'; // Ensure text is visible
+    if (signalBadge) {
+        signalBadge.textContent = data.overall_signal;
+        signalBadge.className = 'signal-badge ' + (data.signal_class || 'hold');
+        signalBadge.style.backgroundColor = color;
+        signalBadge.style.color = '#fff';
+    }
 
     // Confidence
     const confidenceFill = document.getElementById('recConfidenceFill');
     const confidenceValue = document.getElementById('recConfidenceValue');
-    confidenceFill.style.width = `${data.confidence}%`;
-    confidenceFill.style.backgroundColor = color;
-    confidenceValue.textContent = `${data.confidence.toFixed(1)}%`;
+    const confVal = data.confidence || 0;
+    if (confidenceFill) {
+        confidenceFill.style.width = `${confVal}%`;
+        confidenceFill.style.backgroundColor = color;
+    }
+    if (confidenceValue) {
+        confidenceValue.textContent = `${confVal.toFixed ? confVal.toFixed(1) : confVal}%`;
+    }
 
     // AI Verdict (New)
     const verdictEl = document.getElementById('recVerdict');
@@ -2182,10 +2188,14 @@ function renderAdvancedRecommendation(data, aiEnabled = true) {
 
     // Rationale
     const rationale = document.getElementById('recRationale');
-    rationale.innerHTML = `
-        <div style="margin-bottom: 12px;">"${data.expert_rationale}"</div>
-        ${data.action_summary ? `<div style="font-weight: 600; color: var(--accent-primary); border-top: 1px solid var(--border-color); padding-top: 8px;">💡 Action: ${data.action_summary}</div>` : ''}
-    `;
+    if (rationale && data.expert_rationale) {
+        rationale.innerHTML = `
+            <div style="margin-bottom: 12px;">"${data.expert_rationale}"</div>
+            ${data.action_summary ? `<div style="font-weight: 600; color: var(--accent-primary); border-top: 1px solid var(--border-color); padding-top: 8px;">💡 Action: ${data.action_summary}</div>` : ''}
+        `;
+    } else if (rationale) {
+        rationale.innerHTML = '<div style="color: var(--text-muted); font-style: italic;">Analysis data not available for this stock.</div>';
+    }
 
     // Scenarios (New)
     if (data.scenarios) {
@@ -2266,16 +2276,18 @@ function renderAdvancedRecommendation(data, aiEnabled = true) {
 
     // Factors
     const factorsList = document.getElementById('recFactorsList');
-    factorsList.innerHTML = data.key_factors.map(f => {
-        const isPos = f.impact === 'positive';
-        const textColor = isPos ? '#10b981' : '#ef4444';
-        const bg = isPos ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)';
-        const border = isPos ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)';
+    if (factorsList && data.key_factors && Array.isArray(data.key_factors)) {
+        factorsList.innerHTML = data.key_factors.map(f => {
+            const isPos = f.impact === 'positive';
+            const textColor = isPos ? '#10b981' : '#ef4444';
+            const bg = isPos ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)';
+            const border = isPos ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)';
 
-        return `<div class="factor-tag" style="font-size: 11px; padding: 4px 8px; border-radius: 4px; background: ${bg}; color: ${textColor}; border: 1px solid ${border}; white-space: nowrap;">
-            ${isPos ? '▲' : '▼'} ${f.factor}
-        </div>`;
-    }).join('');
+            return `<div class="factor-tag" style="font-size: 11px; padding: 4px 8px; border-radius: 4px; background: ${bg}; color: ${textColor}; border: 1px solid ${border}; white-space: nowrap;">
+                ${isPos ? '▲' : '▼'} ${f.factor}
+            </div>`;
+        }).join('');
+    }
 
     // Timeframes
     const renderTimeframe = (id, tfData) => {
@@ -2293,10 +2305,12 @@ function renderAdvancedRecommendation(data, aiEnabled = true) {
         }
     };
 
-    renderTimeframe('tfIntraday', data.timeframe_recommendations.intraday);
-    renderTimeframe('tfShortTerm', data.timeframe_recommendations.short_term);
-    renderTimeframe('tfMidTerm', data.timeframe_recommendations.medium_term);
-    renderTimeframe('tfLongTerm', data.timeframe_recommendations.long_term);
+    if (data.timeframe_recommendations) {
+        renderTimeframe('tfIntraday', data.timeframe_recommendations.intraday);
+        renderTimeframe('tfShortTerm', data.timeframe_recommendations.short_term);
+        renderTimeframe('tfMidTerm', data.timeframe_recommendations.medium_term);
+        renderTimeframe('tfLongTerm', data.timeframe_recommendations.long_term);
+    }
 }
 
 function renderExternalLinks(links, symbol) {
@@ -2343,12 +2357,12 @@ function openResearchForStock(symbol) {
                 loadResearchData(symbol);
             } else {
                 console.error('[Research] Could not find researchSearchInput element');
-                alert('Error: Research input not found');
+                showToast('Error: Research input not found', 'error');
             }
         }, 300);  // Increased delay to ensure DOM is ready
     } catch (e) {
         console.error('[Research] Error:', e);
-        alert('Research error: ' + e.message);
+        showToast('Research error: ' + e.message, 'error');
     }
 }
 
@@ -2442,10 +2456,8 @@ async function toggleWatchlist(symbol, event) {
     }
 }
 
-// Legacy alias for backwards compatibility
-async function toggleWatchlist(symbol, event) {
-    return toggleWatchlist(symbol, event);
-}
+// Legacy alias removed - was causing infinite recursion
+// toggleWatchlist is already defined above
 
 // Setup watchlist modal handlers
 document.addEventListener('DOMContentLoaded', () => {
@@ -2556,11 +2568,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 loadWatchlist();
 
                 // Show success with auto-calculated info
-                if (result.auto_calculated) {
-                    alert(`${symbol.toUpperCase()} added!\n\nAuto-calculated:\nTarget: ₹${result.target_price}\nStop Loss: ₹${result.stop_loss}`);
-                }
+                showToast(`${symbol.toUpperCase()} added with auto-calculated targets!`, 'success');
             } catch (error) {
-                alert('Failed to add stock: ' + error.message);
+                showToast('Failed to add stock: ' + error.message, 'error');
             } finally {
                 submitBtn.textContent = originalText;
                 submitBtn.disabled = false;
@@ -3034,9 +3044,20 @@ function showScreenInfo(screen) {
     if (!infoBox) return;
 
     document.getElementById('screenInfoName').textContent = screen.name;
-    document.getElementById('screenInfoCategory').textContent = `${getCategoryIcon(screen.category)} ${screen.category}`;
+    const catEl = document.getElementById('screenInfoCategory');
+    catEl.textContent = `${getCategoryIcon(screen.category)} ${screen.category}`;
     document.getElementById('screenInfoDefinition').textContent = screen.definition || '--';
-    document.getElementById('screenInfoSummary').textContent = screen.summary || '--';
+
+    // Enhanced summary with difficulty and risk
+    const diffColor = screen.difficulty === 'Beginner' ? '#22c55e' : screen.difficulty === 'Intermediate' ? '#f59e0b' : '#ef4444';
+    const riskColor = screen.risk_level === 'Low' ? '#22c55e' : screen.risk_level === 'Medium' ? '#f59e0b' : '#ef4444';
+    const summaryEl = document.getElementById('screenInfoSummary');
+    summaryEl.innerHTML = `${screen.summary || '--'}
+        <div style="display: flex; gap: 12px; margin-top: 10px; flex-wrap: wrap;">
+            <span class="difficulty-badge" style="background: ${diffColor}20; color: ${diffColor}; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 600;">${screen.difficulty || 'Intermediate'}</span>
+            <span class="risk-badge" style="background: ${riskColor}20; color: ${riskColor}; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 600;">Risk: ${screen.risk_level || 'Medium'}</span>
+            ${screen.why_it_matters ? `<span style="color: var(--text-muted); font-size: 12px; font-style: italic;">💡 ${screen.why_it_matters}</span>` : ''}
+        </div>`;
 
     const rating = screen.fresh_entry_rating || 3;
     document.getElementById('screenInfoRating').textContent = '★'.repeat(rating) + '☆'.repeat(5 - rating);
@@ -3062,24 +3083,8 @@ async function runScreenFromDropdown(screenId) {
                     <span style="color: var(--text-secondary);">${data.matches} stocks matched</span>
                     <span style="font-size: 12px; color: var(--text-muted);">Scanned ${data.total_scanned} stocks (${data.live_data_count} live)</span>
                 </div>
-                <div class="screener-results-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px;">
-                    ${data.stocks.map(stock => `
-                        <div class="screener-card" onclick="showStockDetail('${stock.symbol}')" style="background: var(--bg-secondary); padding: 16px; border-radius: 12px; border: 1px solid var(--border-color); cursor: pointer; transition: transform 0.2s, border-color 0.2s;">
-                            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
-                                <span style="font-size: 16px; font-weight: 700;">${stock.symbol}</span>
-                                <span style="font-size: 13px; font-weight: 600; color: ${stock.score >= 75 ? '#22c55e' : stock.score >= 50 ? '#f59e0b' : 'var(--text-muted)'};">
-                                    Score: ${Math.round(stock.score)}
-                                </span>
-                            </div>
-                            <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 12px;">${stock.mcap || 'Stock'}</div>
-                            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; font-size: 12px;">
-                                <div><span style="color: var(--text-muted);">P/E:</span> <span style="font-weight: 500;">${stock.pe || '--'}</span></div>
-                                <div><span style="color: var(--text-muted);">ROE:</span> <span style="font-weight: 500;">${stock.roe ? stock.roe.toFixed(1) + '%' : '--'}</span></div>
-                                <div><span style="color: var(--text-muted);">ROCE:</span> <span style="font-weight: 500;">${stock.roce ? stock.roce.toFixed(1) + '%' : '--'}</span></div>
-                                <div><span style="color: var(--text-muted);">D/E:</span> <span style="font-weight: 500;">${stock.de !== undefined ? stock.de.toFixed(2) : '--'}</span></div>
-                            </div>
-                        </div>
-                    `).join('')}
+                <div class="screener-results-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px;">
+                    ${data.stocks.map(stock => renderScreenerStockCard(stock)).join('')}
                 </div>
             `;
         } else {
@@ -3211,6 +3216,164 @@ async function loadAndRenderScreens() {
     if (!data) return;
 
     document.getElementById('screenCount').textContent = `${data.total} Screens`;
+
+    // Populate glossary if available
+    if (data.glossary) {
+        populateGlossary(data.glossary);
+    }
+
+    // Setup category filter tabs
+    setupCategoryFilterTabs();
+
+    // Setup glossary modal
+    setupGlossaryModal();
+}
+
+function setupCategoryFilterTabs() {
+    document.querySelectorAll('.category-tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.category-tab-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            const category = btn.dataset.category;
+            currentCategoryFilter = category;
+            renderScreensGrid();
+
+            // Also filter dropdown
+            filterScreenDropdown(category);
+        });
+    });
+}
+
+function filterScreenDropdown(category) {
+    if (!screensCache) return;
+    const dropdown = document.getElementById('screenDropdown');
+    if (!dropdown) return;
+
+    const screens = screensCache.screens;
+    let filtered = screens;
+    if (category === 'beginner') {
+        filtered = screens.filter(s => s.difficulty === 'Beginner');
+    } else if (category !== 'all') {
+        filtered = screens.filter(s => s.category === category);
+    }
+
+    let html = '<option value="">-- Choose a Screen --</option>';
+    const groups = {};
+    filtered.forEach(s => {
+        if (!groups[s.category]) groups[s.category] = [];
+        groups[s.category].push(s);
+    });
+    Object.entries(groups).forEach(([cat, items]) => {
+        html += `<optgroup label="${getCategoryIcon(cat)} ${cat}">`;
+        items.forEach(s => {
+            const badge = s.difficulty === 'Beginner' ? ' 🌱' : s.difficulty === 'Advanced' ? ' 🔥' : '';
+            html += `<option value="${s.id}">${s.name}${badge}</option>`;
+        });
+        html += '</optgroup>';
+    });
+    dropdown.innerHTML = html;
+}
+
+function setupGlossaryModal() {
+    const openBtn = document.getElementById('openGlossaryBtn');
+    const closeBtn = document.getElementById('closeGlossaryBtn');
+    const modal = document.getElementById('glossaryModal');
+
+    if (openBtn && modal) {
+        openBtn.addEventListener('click', () => modal.classList.remove('hidden'));
+    }
+    if (closeBtn && modal) {
+        closeBtn.addEventListener('click', () => modal.classList.add('hidden'));
+    }
+    if (modal) {
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) modal.classList.add('hidden');
+        });
+    }
+}
+
+function populateGlossary(glossary) {
+    const container = document.getElementById('glossaryContent');
+    if (!container || !glossary) return;
+
+    container.innerHTML = Object.entries(glossary).map(([key, item]) => `
+        <div class="glossary-item" style="background: var(--bg-secondary); border-radius: 12px; padding: 16px; border: 1px solid var(--border-color);">
+            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+                <span style="font-size: 20px;">${item.icon}</span>
+                <h4 style="margin: 0; font-size: 15px; font-weight: 700;">${item.name}</h4>
+            </div>
+            <p style="color: var(--text-primary); font-size: 14px; margin: 0 0 8px 0; line-height: 1.5;">${item.simple}</p>
+            <div style="background: var(--bg-tertiary); padding: 10px; border-radius: 8px; margin-bottom: 8px;">
+                <span style="font-size: 11px; color: var(--text-muted); text-transform: uppercase;">Example</span>
+                <p style="margin: 4px 0 0; font-size: 13px; color: var(--text-secondary);">${item.example}</p>
+            </div>
+            <div style="display: flex; gap: 12px; font-size: 12px;">
+                <span style="color: #22c55e;">✅ Good: ${item.good_range}</span>
+                <span style="color: #ef4444;">⚠️ Concern: ${item.warning_range}</span>
+            </div>
+        </div>
+    `).join('');
+}
+
+// Color-coded metric rendering with tooltip
+function colorMetric(key, value, suffix = '') {
+    if (value === null || value === undefined || value === '--') {
+        return `<span style="font-weight: 500; color: var(--text-muted);">--</span>`;
+    }
+
+    let color = 'var(--text-primary)';
+    let tooltipText = '';
+
+    const glossary = screensCache?.glossary || {};
+    if (glossary[key]) {
+        tooltipText = glossary[key].simple;
+    }
+
+    switch (key) {
+        case 'pe':
+            color = value < 15 ? '#22c55e' : value < 25 ? '#f59e0b' : value < 40 ? '#fb923c' : '#ef4444';
+            break;
+        case 'roe':
+            color = value > 25 ? '#22c55e' : value > 15 ? '#a3e635' : value > 8 ? '#f59e0b' : '#ef4444';
+            break;
+        case 'roce':
+            color = value > 25 ? '#22c55e' : value > 18 ? '#a3e635' : value > 10 ? '#f59e0b' : '#ef4444';
+            break;
+        case 'de':
+            color = value < 0.3 ? '#22c55e' : value < 1 ? '#a3e635' : value < 1.5 ? '#f59e0b' : '#ef4444';
+            break;
+        case 'pb':
+            color = value < 1 ? '#22c55e' : value < 3 ? '#a3e635' : value < 6 ? '#f59e0b' : '#ef4444';
+            break;
+        case 'div_yield':
+            color = value > 3 ? '#22c55e' : value > 1.5 ? '#a3e635' : value > 0 ? '#f59e0b' : 'var(--text-muted)';
+            break;
+    }
+
+    const displayVal = typeof value === 'number' ? (key === 'de' || key === 'pb' ? value.toFixed(2) : value.toFixed(1)) : value;
+    const tooltip = tooltipText ? `title="${tooltipText}"` : '';
+
+    return `<span class="metric-colored" style="font-weight: 600; color: ${color}; cursor: help;" ${tooltip}>${displayVal}${suffix}</span>`;
+}
+
+function renderScreenerStockCard(stock) {
+    return `
+        <div class="screener-card" onclick="showStockDetail('${stock.symbol}')" style="background: var(--bg-secondary); padding: 16px; border-radius: 12px; border: 1px solid var(--border-color); cursor: pointer; transition: transform 0.2s, border-color 0.2s;">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
+                <span style="font-size: 16px; font-weight: 700;">${stock.symbol}</span>
+                <span style="font-size: 13px; font-weight: 600; color: ${stock.score >= 75 ? '#22c55e' : stock.score >= 50 ? '#f59e0b' : 'var(--text-muted)'};">Score: ${Math.round(stock.score)}</span>
+            </div>
+            <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 12px;">${stock.mcap || 'Stock'}</div>
+            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; font-size: 12px;">
+                <div class="metric-cell"><span style="color: var(--text-muted);">P/E</span><br>${colorMetric('pe', stock.pe)}</div>
+                <div class="metric-cell"><span style="color: var(--text-muted);">ROE</span><br>${colorMetric('roe', stock.roe, '%')}</div>
+                <div class="metric-cell"><span style="color: var(--text-muted);">ROCE</span><br>${colorMetric('roce', stock.roce, '%')}</div>
+                <div class="metric-cell"><span style="color: var(--text-muted);">D/E</span><br>${colorMetric('de', stock.de)}</div>
+                <div class="metric-cell"><span style="color: var(--text-muted);">P/B</span><br>${colorMetric('pb', stock.pb)}</div>
+                <div class="metric-cell"><span style="color: var(--text-muted);">Div%</span><br>${colorMetric('div_yield', stock.div_yield, '%')}</div>
+            </div>
+        </div>
+    `;
 }
 
 function renderScreensGrid() {
@@ -3218,7 +3381,9 @@ function renderScreensGrid() {
     if (!grid || !screensCache) return;
 
     let screens = screensCache.screens;
-    if (currentCategoryFilter !== 'all') {
+    if (currentCategoryFilter === 'beginner') {
+        screens = screens.filter(s => s.difficulty === 'Beginner');
+    } else if (currentCategoryFilter !== 'all') {
         screens = screens.filter(s => s.category === currentCategoryFilter);
     }
 
@@ -3227,21 +3392,30 @@ function renderScreensGrid() {
         return;
     }
 
-    grid.innerHTML = screens.map(screen => `
-        <div class="screen-card ${screen.recommended_for_fresh_entry ? 'recommended' : ''}" 
-             data-screen-id="${screen.id}" 
-             onclick="openScreenDetail('${screen.id}')">
-            <div class="screen-card-header">
-                <span class="screen-card-name">${screen.name}</span>
-                ${screen.recommended_for_fresh_entry ? '<span class="fresh-badge">⭐ Recommended</span>' : ''}
+    grid.innerHTML = screens.map(screen => {
+        const diffColor = screen.difficulty === 'Beginner' ? '#22c55e' : screen.difficulty === 'Intermediate' ? '#f59e0b' : '#ef4444';
+        const riskColor = screen.risk_level === 'Low' ? '#22c55e' : screen.risk_level === 'Medium' ? '#f59e0b' : '#ef4444';
+        return `
+            <div class="screen-card ${screen.recommended_for_fresh_entry ? 'recommended' : ''}" 
+                 data-screen-id="${screen.id}" 
+                 onclick="openScreenDetail('${screen.id}')">
+                <div class="screen-card-header">
+                    <span class="screen-card-name">${screen.name}</span>
+                    <div style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap;">
+                        <span class="difficulty-pill" style="background: ${diffColor}18; color: ${diffColor}; padding: 2px 8px; border-radius: 12px; font-size: 10px; font-weight: 600;">${screen.difficulty || 'Intermediate'}</span>
+                        <span class="risk-pill" style="background: ${riskColor}18; color: ${riskColor}; padding: 2px 8px; border-radius: 12px; font-size: 10px; font-weight: 600;">Risk: ${screen.risk_level || 'Medium'}</span>
+                        ${screen.recommended_for_fresh_entry ? '<span class="fresh-badge">⭐</span>' : ''}
+                    </div>
+                </div>
+                <div class="screen-card-category">${getCategoryIcon(screen.category)} ${screen.category}</div>
+                <div class="screen-card-definition">${screen.definition}</div>
+                ${screen.why_it_matters ? `<div class="screen-card-why" style="font-size: 12px; color: var(--accent-primary); margin-top: 6px; font-style: italic;">💡 ${screen.why_it_matters}</div>` : ''}
+                <div class="screen-card-footer">
+                    <span class="fresh-rating">Fresh Entry: ${'★'.repeat(screen.fresh_entry_rating)}${'☆'.repeat(5 - screen.fresh_entry_rating)}</span>
+                </div>
             </div>
-            <div class="screen-card-category">${getCategoryIcon(screen.category)} ${screen.category}</div>
-            <div class="screen-card-definition">${screen.definition}</div>
-            <div class="screen-card-footer">
-                <span class="fresh-rating">Fresh Entry: ${'★'.repeat(screen.fresh_entry_rating)}${'☆'.repeat(5 - screen.fresh_entry_rating)}</span>
-            </div>
-        </div>
-    `).join('');
+        `;
+    }).join('');
 }
 
 function getCategoryIcon(category) {
@@ -4168,21 +4342,68 @@ async function analyzePatterns(symbol) {
             return;
         }
 
-        // Render results
+        // Determine overall verdict for beginners
+        const signal = (data.overall_signal || '').toLowerCase();
+        let verdictEmoji, verdictText, verdictColor, verdictAdvice;
+        if (signal.includes('bullish') || signal.includes('buy')) {
+            verdictEmoji = '🟢'; verdictColor = '#22c55e';
+            verdictText = 'Bullish — Upward momentum detected';
+            verdictAdvice = 'Technical indicators suggest this stock has positive momentum. Consider researching fundamentals before buying.';
+        } else if (signal.includes('bearish') || signal.includes('sell')) {
+            verdictEmoji = '🔴'; verdictColor = '#ef4444';
+            verdictText = 'Bearish — Downward pressure detected';
+            verdictAdvice = 'Technical indicators suggest caution. Wait for momentum to improve or check if fundamentals justify holding.';
+        } else {
+            verdictEmoji = '🟡'; verdictColor = '#f59e0b';
+            verdictText = 'Neutral — No strong signal';
+            verdictAdvice = 'The stock is consolidating. Watch for a breakout above resistance or breakdown below support.';
+        }
+
+        // RSI interpretation
+        const rsi = data.momentum?.rsi;
+        let rsiColor = 'var(--text-primary)', rsiMeaning = '';
+        if (rsi) {
+            if (rsi > 70) { rsiColor = '#ef4444'; rsiMeaning = '⚠️ Overbought — the stock has risen too fast. It may pull back. Not ideal to buy now.'; }
+            else if (rsi > 60) { rsiColor = '#fb923c'; rsiMeaning = '📈 Strong momentum — trending up but not extreme. Watch for reversal signs.'; }
+            else if (rsi >= 40) { rsiColor = '#22c55e'; rsiMeaning = '✅ Healthy range — the stock is in a balanced zone. Good time to consider entry.'; }
+            else if (rsi >= 30) { rsiColor = '#f59e0b'; rsiMeaning = '📉 Weak momentum — losing steam. Could be a bargain or a falling knife.'; }
+            else { rsiColor = '#22c55e'; rsiMeaning = '🟢 Oversold — the stock has fallen too much. Potential bounce-back opportunity!'; }
+        }
+
+        // RS interpretation
+        const rsVal = data.relative_strength?.rs_value;
+        let rsColor = 'var(--text-primary)', rsMeaning = '';
+        if (rsVal) {
+            if (rsVal > 120) { rsColor = '#22c55e'; rsMeaning = '💪 Beating the market significantly! This stock is a relative outperformer.'; }
+            else if (rsVal > 100) { rsColor = '#a3e635'; rsMeaning = '📈 Outperforming the market slightly. Positive sign.'; }
+            else if (rsVal > 80) { rsColor = '#f59e0b'; rsMeaning = '📉 Underperforming the market slightly. Watch closely.'; }
+            else { rsColor = '#ef4444'; rsMeaning = '⚠️ Significantly lagging the market. Investigate why before investing.'; }
+        }
+
         let html = `
         <div class="quant-results">
-            <div class="quant-header">
-                <h2>${data.symbol}</h2>
-                <span class="signal-badge ${data.overall_signal.toLowerCase()}">${data.overall_signal}</span>
+            <!-- Beginner Verdict Card -->
+            <div class="beginner-verdict-card" style="background: ${verdictColor}10; border: 1px solid ${verdictColor}40; border-radius: 16px; padding: 20px; margin-bottom: 24px;">
+                <div style="display: flex; align-items: center; gap: 16px; margin-bottom: 12px;">
+                    <span style="font-size: 40px;">${verdictEmoji}</span>
+                    <div>
+                        <h3 style="margin: 0; font-size: 20px; font-weight: 700;">${data.symbol}</h3>
+                        <span style="color: ${verdictColor}; font-weight: 600; font-size: 16px;">${verdictText}</span>
+                    </div>
+                </div>
+                <p style="color: var(--text-secondary); font-size: 14px; margin: 0; line-height: 1.6;">💡 <strong>What this means for you:</strong> ${verdictAdvice}</p>
             </div>
             
             <div class="quant-grid">
                 <!-- Relative Strength -->
                 <div class="settings-card">
                     <h4>📊 Relative Strength (vs NIFTY)</h4>
-                    <div class="metric-large">${data.relative_strength?.rs_value || 'N/A'}</div>
+                    <div class="metric-large" style="color: ${rsColor}">${rsVal || 'N/A'}</div>
                     <p class="metric-label">${data.relative_strength?.rs_rating || ''}</p>
-                    <small>${data.relative_strength?.interpretation || ''}</small>
+                    <div class="beginner-explain" style="background: var(--bg-tertiary); padding: 10px; border-radius: 8px; margin-top: 10px;">
+                        <p style="font-size: 12px; color: var(--text-muted); margin: 0 0 4px 0;">📖 <strong>What is this?</strong> Compares how this stock moved vs the overall market (NIFTY 50). Above 100 = beating the market.</p>
+                        ${rsMeaning ? `<p style="font-size: 13px; margin: 0; color: var(--text-secondary);">${rsMeaning}</p>` : ''}
+                    </div>
                 </div>
                 
                 <!-- Momentum -->
@@ -4190,13 +4411,17 @@ async function analyzePatterns(symbol) {
                     <h4>📈 Momentum Indicators</h4>
                     <div class="metric-row">
                         <span>RSI (14):</span>
-                        <strong class="${data.momentum?.rsi > 70 ? 'text-red' : (data.momentum?.rsi < 30 ? 'text-green' : '')}">${data.momentum?.rsi || 'N/A'} (${data.momentum?.rsi_zone || ''})</strong>
+                        <strong style="color: ${rsiColor}">${rsi || 'N/A'} (${data.momentum?.rsi_zone || ''})</strong>
                     </div>
                     <div class="metric-row">
                         <span>MACD Trend:</span>
                         <strong class="${data.momentum?.macd_trend === 'Bullish' ? 'text-green' : 'text-red'}">${data.momentum?.macd_trend || 'N/A'}</strong>
                     </div>
-                    <small>${data.momentum?.interpretation || ''}</small>
+                    <div class="beginner-explain" style="background: var(--bg-tertiary); padding: 10px; border-radius: 8px; margin-top: 10px;">
+                        <p style="font-size: 12px; color: var(--text-muted); margin: 0 0 4px 0;">📖 <strong>RSI</strong> = Relative Strength Index. Like a speedometer: below 30 = oversold (potential buy), above 70 = overbought (potential sell).</p>
+                        ${rsiMeaning ? `<p style="font-size: 13px; margin: 0; color: var(--text-secondary);">${rsiMeaning}</p>` : ''}
+                        <p style="font-size: 12px; color: var(--text-muted); margin: 8px 0 0 0;">📖 <strong>MACD</strong> = Shows if the trend is changing direction. Bullish = price starting to rise. Bearish = price starting to fall.</p>
+                    </div>
                 </div>
             </div>
             
@@ -4204,24 +4429,24 @@ async function analyzePatterns(symbol) {
             <div class="settings-card" style="margin-top: 16px;">
                 <h4>🔍 Detected Patterns (${data.patterns?.length || 0})</h4>
                 ${data.patterns?.length ? data.patterns.map(p => `
-                    <div class="pattern-item ${p.type}">
-                        <div class="pattern-header">
-                            <span class="pattern-name">${p.pattern}</span>
-                            <span class="badge ${p.type}">${p.reliability}</span>
+                    <div class="pattern-item ${p.type}" style="padding: 12px; background: var(--bg-tertiary); border-radius: 8px; margin-bottom: 8px; border-left: 3px solid ${p.type === 'bullish' ? '#22c55e' : p.type === 'bearish' ? '#ef4444' : '#f59e0b'};">
+                        <div class="pattern-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                            <span class="pattern-name" style="font-weight: 700;">${p.pattern}</span>
+                            <span class="badge ${p.type}" style="padding: 2px 10px; border-radius: 12px; font-size: 11px; background: ${p.type === 'bullish' ? '#22c55e20' : p.type === 'bearish' ? '#ef444420' : '#f59e0b20'}; color: ${p.type === 'bullish' ? '#22c55e' : p.type === 'bearish' ? '#ef4444' : '#f59e0b'};">${p.reliability}</span>
                         </div>
-                        <p class="pattern-desc">${p.description}</p>
-                        <p class="pattern-action"><strong>Action:</strong> ${p.action}</p>
+                        <p style="color: var(--text-secondary); font-size: 13px; margin: 0 0 6px 0;">${p.description}</p>
+                        <p style="font-size: 13px; margin: 0;"><strong>👉 Action:</strong> ${p.action}</p>
                     </div>
-                `).join('') : '<p style="color: var(--text-muted);">No patterns detected in recent data</p>'}
+                `).join('') : '<div style="padding: 16px; text-align: center; color: var(--text-muted);">No patterns detected in recent data. The stock may be in a quiet phase — check back later.</div>'}
             </div>
             
-            <p class="summary-text">${data.summary || ''}</p>
+            ${data.summary ? `<p class="summary-text" style="background: var(--bg-tertiary); padding: 16px; border-radius: 12px; border-left: 3px solid var(--accent-primary); margin-top: 16px; font-size: 14px; color: var(--text-secondary); line-height: 1.6;">📝 ${data.summary}</p>` : ''}
         </div>`;
 
         container.innerHTML = html;
 
     } catch (e) {
-        container.innerHTML = `<div class="empty-state"><span style="font-size:48px">❌</span><p>Error: ${e.message}</p></div>`;
+        container.innerHTML = `<div class="empty-state"><span style="font-size:48px">❌</span><p>Error: ${e.message}</p><p style="color: var(--text-muted); font-size: 12px; margin-top: 8px;">Try a different stock symbol or check your internet connection.</p></div>`;
     }
 }
 
@@ -4258,73 +4483,119 @@ async function analyzeQvm(symbol) {
         }
 
         const inv = data.investability || {};
+        const iScore = inv.score || 0;
+
+        // Beginner-friendly verdict
+        let verdictEmoji, verdictColor, verdictText, verdictAdvice;
+        if (iScore >= 80) {
+            verdictEmoji = '🟢'; verdictColor = '#22c55e';
+            verdictText = 'Excellent — Strong on all fronts';
+            verdictAdvice = 'This stock scores well on quality, value, and momentum. Worth serious research for your portfolio.';
+        } else if (iScore >= 60) {
+            verdictEmoji = '🟡'; verdictColor = '#a3e635';
+            verdictText = 'Good — Solid pick with some concerns';
+            verdictAdvice = 'Check which dimension is weak (Q, V, or M). If quality is high but valuation is low, it might be overpriced.';
+        } else if (iScore >= 40) {
+            verdictEmoji = '🟠'; verdictColor = '#f59e0b';
+            verdictText = 'Fair — Needs deeper research';
+            verdictAdvice = 'Mixed signals. Dig deeper into the weak areas before investing. Consider waiting for better entry.';
+        } else {
+            verdictEmoji = '🔴'; verdictColor = '#ef4444';
+            verdictText = 'Weak — Proceed with caution';
+            verdictAdvice = 'Multiple red flags detected. This stock needs significant improvement before it becomes investable.';
+        }
+
+        // Score color helper
+        const scoreColor = (s, max = 10) => {
+            const pct = (s / max) * 100;
+            return pct >= 70 ? '#22c55e' : pct >= 50 ? '#f59e0b' : '#ef4444';
+        };
+
+        // Score label helper
+        const scoreLabel = (s) => {
+            if (s >= 8) return 'Excellent';
+            if (s >= 6) return 'Good';
+            if (s >= 4) return 'Fair';
+            if (s >= 2) return 'Weak';
+            return 'Poor';
+        };
+
+        // Score explanation helper
+        const qExplain = (s) => s >= 7 ? 'Well-managed company with strong fundamentals 👍' : s >= 4 ? 'Decent management, room for improvement' : 'Weak fundamentals — high risk ⚠️';
+        const vExplain = (s) => s >= 7 ? 'Attractively priced — good value for money 💰' : s >= 4 ? 'Fairly priced — not cheap, not expensive' : 'Overvalued — price seems too high ⚠️';
+        const mExplain = (s) => s >= 7 ? 'Strong uptrend — stock is gaining momentum 🚀' : s >= 4 ? 'Sideways movement — no clear direction' : 'Downtrend — losing momentum 📉';
+
+        const qScore = data.quality?.score || 0;
+        const vScore = data.valuation?.score || 0;
+        const mScore = data.momentum?.score || 0;
 
         let html = `
         <div class="quant-results">
-            <div class="quant-header">
-                <h2>${data.symbol} - ${data.name}</h2>
-                <span class="signal-badge ${inv.recommendation?.toLowerCase().replace(' ', '-')}">${inv.recommendation || 'N/A'}</span>
-            </div>
-            <p style="color: var(--text-muted); margin-bottom: 20px;">${data.sector} | ${data.industry}</p>
-            
-            <!-- Investability Score -->
-            <div class="investability-score">
-                <div class="score-circle" style="--score: ${inv.score || 0}">
-                    <span class="score-value">${inv.score || 0}</span>
-                    <span class="score-label">/ 100</span>
-                </div>
-                <div class="score-info">
-                    <h3>Investability Score</h3>
-                    <p>${inv.rating || ''}</p>
-                </div>
-            </div>
-            
-            <div class="quant-grid" style="margin-top: 24px;">
-                <!-- Quality Score -->
-                <div class="settings-card">
-                    <h4>✨ Quality Score</h4>
-                    <div class="score-bar">
-                        <div class="score-fill" style="width: ${(data.quality?.score / 10) * 100}%; background: var(--accent);"></div>
+            <!-- Verdict Card -->
+            <div style="background: ${verdictColor}10; border: 1px solid ${verdictColor}40; border-radius: 16px; padding: 20px; margin-bottom: 24px;">
+                <div style="display: flex; align-items: center; gap: 16px; margin-bottom: 12px;">
+                    <div style="position: relative; width: 80px; height: 80px;">
+                        <svg viewBox="0 0 36 36" style="width: 80px; height: 80px; transform: rotate(-90deg);">
+                            <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="var(--bg-tertiary)" stroke-width="3" />
+                            <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="${verdictColor}" stroke-width="3" stroke-dasharray="${iScore}, 100" stroke-linecap="round" />
+                        </svg>
+                        <div style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 800; color: ${verdictColor};">${iScore}</div>
                     </div>
-                    <div class="score-label">${data.quality?.score || 0} / 10 (${data.quality?.rating || 'N/A'})</div>
-                    <ul class="breakdown-list">
+                    <div>
+                        <h3 style="margin: 0; font-size: 20px; font-weight: 700;">${data.symbol} <span style="font-weight: 400; font-size: 14px; color: var(--text-muted);">— ${data.name || ''}</span></h3>
+                        <span style="color: ${verdictColor}; font-weight: 600; font-size: 16px;">${verdictEmoji} ${verdictText}</span>
+                        ${data.sector ? `<p style="color: var(--text-muted); font-size: 12px; margin: 4px 0 0 0;">${data.sector} · ${data.industry || ''}</p>` : ''}
+                    </div>
+                </div>
+                <p style="color: var(--text-secondary); font-size: 14px; margin: 0; line-height: 1.6;">💡 <strong>What to do:</strong> ${verdictAdvice}</p>
+            </div>
+            
+            <div class="quant-grid" style="margin-top: 0;">
+                <!-- Quality -->
+                <div class="settings-card">
+                    <h4>✨ Quality <span style="float: right; color: ${scoreColor(qScore)}; font-size: 18px; font-weight: 800;">${qScore}/10</span></h4>
+                    <div style="height: 8px; background: var(--bg-tertiary); border-radius: 4px; overflow: hidden; margin-bottom: 8px;">
+                        <div style="height: 100%; width: ${qScore * 10}%; background: ${scoreColor(qScore)}; border-radius: 4px; transition: width 0.8s ease;"></div>
+                    </div>
+                    <p style="font-size: 13px; font-weight: 600; color: ${scoreColor(qScore)}; margin: 0 0 8px 0;">${scoreLabel(qScore)} — ${qExplain(qScore)}</p>
+                    <ul class="breakdown-list" style="font-size: 12px; color: var(--text-muted);">
                         ${data.quality?.breakdown?.map(b => `<li>${b}</li>`).join('') || ''}
                     </ul>
                 </div>
                 
-                <!-- Valuation Score -->
+                <!-- Valuation -->
                 <div class="settings-card">
-                    <h4>💰 Valuation Score</h4>
-                    <div class="score-bar">
-                        <div class="score-fill" style="width: ${(data.valuation?.score / 10) * 100}%; background: var(--success);"></div>
+                    <h4>💰 Valuation <span style="float: right; color: ${scoreColor(vScore)}; font-size: 18px; font-weight: 800;">${vScore}/10</span></h4>
+                    <div style="height: 8px; background: var(--bg-tertiary); border-radius: 4px; overflow: hidden; margin-bottom: 8px;">
+                        <div style="height: 100%; width: ${vScore * 10}%; background: ${scoreColor(vScore)}; border-radius: 4px; transition: width 0.8s ease;"></div>
                     </div>
-                    <div class="score-label">${data.valuation?.score || 0} / 10 (${data.valuation?.rating || 'N/A'})</div>
-                    <ul class="breakdown-list">
+                    <p style="font-size: 13px; font-weight: 600; color: ${scoreColor(vScore)}; margin: 0 0 8px 0;">${scoreLabel(vScore)} — ${vExplain(vScore)}</p>
+                    <ul class="breakdown-list" style="font-size: 12px; color: var(--text-muted);">
                         ${data.valuation?.breakdown?.map(b => `<li>${b}</li>`).join('') || ''}
                     </ul>
                 </div>
                 
-                <!-- Momentum Score -->
+                <!-- Momentum -->
                 <div class="settings-card">
-                    <h4>🚀 Momentum Score</h4>
-                    <div class="score-bar">
-                        <div class="score-fill" style="width: ${(data.momentum?.score / 10) * 100}%; background: var(--warning);"></div>
+                    <h4>🚀 Momentum <span style="float: right; color: ${scoreColor(mScore)}; font-size: 18px; font-weight: 800;">${mScore}/10</span></h4>
+                    <div style="height: 8px; background: var(--bg-tertiary); border-radius: 4px; overflow: hidden; margin-bottom: 8px;">
+                        <div style="height: 100%; width: ${mScore * 10}%; background: ${scoreColor(mScore)}; border-radius: 4px; transition: width 0.8s ease;"></div>
                     </div>
-                    <div class="score-label">${data.momentum?.score || 0} / 10 (${data.momentum?.rating || 'N/A'})</div>
-                    <ul class="breakdown-list">
+                    <p style="font-size: 13px; font-weight: 600; color: ${scoreColor(mScore)}; margin: 0 0 8px 0;">${scoreLabel(mScore)} — ${mExplain(mScore)}</p>
+                    <ul class="breakdown-list" style="font-size: 12px; color: var(--text-muted);">
                         ${data.momentum?.breakdown?.map(b => `<li>${b}</li>`).join('') || ''}
                     </ul>
                 </div>
             </div>
             
-            <p class="summary-text">${data.summary || ''}</p>
-            ${data.data_note ? `<p class="data-note" style="color: var(--warning); font-size: 12px; margin-top: 12px; padding: 8px; background: rgba(255,165,0,0.1); border-radius: 6px;">${data.data_note}</p>` : ''}
+            ${data.summary ? `<p style="background: var(--bg-tertiary); padding: 16px; border-radius: 12px; border-left: 3px solid var(--accent-primary); margin-top: 16px; font-size: 14px; color: var(--text-secondary); line-height: 1.6;">📝 ${data.summary}</p>` : ''}
+            ${data.data_note ? `<p style="color: var(--warning); font-size: 12px; margin-top: 12px; padding: 8px; background: rgba(255,165,0,0.1); border-radius: 6px;">⚠️ ${data.data_note}</p>` : ''}
         </div>`;
 
         container.innerHTML = html;
 
     } catch (e) {
-        container.innerHTML = `<div class="empty-state"><span style="font-size:48px">❌</span><p>Error: ${e.message}</p></div>`;
+        container.innerHTML = `<div class="empty-state"><span style="font-size:48px">❌</span><p>Error: ${e.message}</p><p style="color: var(--text-muted); font-size: 12px; margin-top: 8px;">Try a different stock symbol or check your internet connection.</p></div>`;
     }
 }
 
@@ -4420,63 +4691,166 @@ async function loadMarketMood() {
         const score = fg.score || 50;
         const zone = fg.zone || 'Neutral';
 
-        // Color based on zone
-        let zoneColor = 'var(--text-muted)';
-        if (zone.includes('Greed')) zoneColor = '#22c55e';
-        if (zone.includes('Fear')) zoneColor = '#ef4444';
+        // Color and action based on zone
+        let zoneColor = '#f59e0b', actionText = '', actionEmoji = '😐';
+        if (zone.includes('Extreme Greed')) { zoneColor = '#22c55e'; actionEmoji = '🤑'; actionText = 'Market is euphoric. Be extra cautious — prices may be inflated. Avoid FOMO buying. Lock in profits on winners.'; }
+        else if (zone.includes('Greed')) { zoneColor = '#a3e635'; actionEmoji = '😊'; actionText = 'Market is optimistic. Stay invested but avoid adding at high prices. Watch for signs of overheating.'; }
+        else if (zone.includes('Extreme Fear')) { zoneColor = '#ef4444'; actionEmoji = '😰'; actionText = 'Maximum fear! Quality stocks are likely available at a discount. If you have cash, this is historically a great buying opportunity.'; }
+        else if (zone.includes('Fear')) { zoneColor = '#fb923c'; actionEmoji = '😟'; actionText = 'Market is nervous. Good time to build a watchlist of quality stocks. Start small positions — don\'t go all in.'; }
+        else { actionText = 'Market is balanced. Follow your research and invest based on fundamentals. No need to rush.'; }
 
         let html = `
         <div class="market-mood-container">
-            <div class="mood-gauge">
-                <div class="gauge-bg">
-                    <div class="gauge-fill" style="--score: ${score}; background: linear-gradient(90deg, #ef4444, #f59e0b, #22c55e);"></div>
-                    <div class="gauge-needle" style="left: ${score}%;"></div>
+            <!-- Main Gauge -->
+            <div style="text-align: center; margin-bottom: 24px;">
+                <div style="position: relative; width: 160px; height: 160px; margin: 0 auto;">
+                    <svg viewBox="0 0 36 36" style="width: 160px; height: 160px; transform: rotate(-90deg);">
+                        <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="var(--bg-tertiary)" stroke-width="2.5" />
+                        <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="${zoneColor}" stroke-width="2.5" stroke-dasharray="${score}, 100" stroke-linecap="round" />
+                    </svg>
+                    <div style="position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;">
+                        <span style="font-size: 42px; font-weight: 800; color: ${zoneColor};">${score}</span>
+                        <span style="font-size: 11px; color: var(--text-muted);">/ 100</span>
+                    </div>
                 </div>
-                <div class="gauge-labels">
-                    <span>Extreme Fear</span>
-                    <span>Neutral</span>
-                    <span>Extreme Greed</span>
+                <div style="margin-top: 12px;">
+                    <span style="font-size: 28px;">${actionEmoji}</span>
+                    <h3 style="color: ${zoneColor}; margin: 4px 0 0 0; font-size: 18px; font-weight: 700;">${zone}</h3>
                 </div>
             </div>
             
-            <div class="mood-score">
-                <div class="score-big" style="color: ${zoneColor}">${score}</div>
-                <div class="score-zone" style="color: ${zoneColor}">${zone}</div>
+            <!-- Action Card -->
+            <div style="background: ${zoneColor}10; border: 1px solid ${zoneColor}40; border-radius: 16px; padding: 16px 20px; margin-bottom: 24px;">
+                <p style="margin: 0; font-size: 14px; line-height: 1.6;">
+                    <strong>👉 What should you do?</strong> ${actionText}
+                </p>
             </div>
+
+            ${fg.interpretation ? `<p style="color: var(--text-secondary); font-size: 14px; text-align: center; margin-bottom: 20px;">${fg.interpretation}</p>` : ''}
             
-            <div class="mood-interpretation">
-                <p>${fg.interpretation || ''}</p>
-                <p class="action"><strong>Action:</strong> ${fg.action || ''}</p>
-            </div>
-            
-            <div class="quant-grid" style="margin-top: 24px;">
+            <div class="quant-grid">
+                <!-- VIX -->
                 <div class="settings-card">
                     <h4>📊 India VIX</h4>
                     <div class="metric-large">${fg.components?.vix?.value || data.vix_data?.current || 'N/A'}</div>
-                    <p>Score: ${fg.components?.vix?.score || 0}/100 (Weight: 40%)</p>
+                    <div style="height: 6px; background: var(--bg-tertiary); border-radius: 3px; overflow: hidden; margin: 8px 0;">
+                        <div style="height: 100%; width: ${Math.min((fg.components?.vix?.score || 0), 100)}%; background: var(--accent-primary); border-radius: 3px;"></div>
+                    </div>
+                    <p style="font-size: 12px; color: var(--text-muted);">Score: ${fg.components?.vix?.score || 0}/100 (Weight: 40%)</p>
+                    <div style="background: var(--bg-tertiary); padding: 8px; border-radius: 6px; margin-top: 8px;">
+                        <p style="font-size: 12px; color: var(--text-muted); margin: 0;">📖 <strong>VIX</strong> = Volatility Index. Measures how "scared" the market is. Low VIX (below 15) = calm market. High VIX (above 25) = panic mode.</p>
+                    </div>
                 </div>
                 
+                <!-- Momentum -->
                 <div class="settings-card">
                     <h4>📈 NIFTY Momentum</h4>
                     <div class="metric-large">${fg.components?.momentum?.roc_14 ? fg.components.momentum.roc_14 + '%' : 'N/A'}</div>
-                    <p>RSI: ${fg.components?.momentum?.rsi || 'N/A'}</p>
-                    <p>Score: ${fg.components?.momentum?.score || 0}/100 (Weight: 30%)</p>
+                    <p style="margin: 4px 0;">RSI: ${fg.components?.momentum?.rsi || 'N/A'}</p>
+                    <div style="height: 6px; background: var(--bg-tertiary); border-radius: 3px; overflow: hidden; margin: 8px 0;">
+                        <div style="height: 100%; width: ${Math.min((fg.components?.momentum?.score || 0), 100)}%; background: var(--accent-primary); border-radius: 3px;"></div>
+                    </div>
+                    <p style="font-size: 12px; color: var(--text-muted);">Score: ${fg.components?.momentum?.score || 0}/100 (Weight: 30%)</p>
+                    <div style="background: var(--bg-tertiary); padding: 8px; border-radius: 6px; margin-top: 8px;">
+                        <p style="font-size: 12px; color: var(--text-muted); margin: 0;">📖 <strong>Momentum</strong> = How fast NIFTY is moving. Positive % = market going up. Negative % = market going down.</p>
+                    </div>
                 </div>
                 
+                <!-- Breadth -->
                 <div class="settings-card">
                     <h4>🎯 Market Breadth</h4>
                     <div class="metric-large">${fg.components?.breadth?.trend || 'N/A'}</div>
-                    <p>Score: ${fg.components?.breadth?.score || 0}/100 (Weight: 30%)</p>
+                    <div style="height: 6px; background: var(--bg-tertiary); border-radius: 3px; overflow: hidden; margin: 8px 0;">
+                        <div style="height: 100%; width: ${Math.min((fg.components?.breadth?.score || 0), 100)}%; background: var(--accent-primary); border-radius: 3px;"></div>
+                    </div>
+                    <p style="font-size: 12px; color: var(--text-muted);">Score: ${fg.components?.breadth?.score || 0}/100 (Weight: 30%)</p>
+                    <div style="background: var(--bg-tertiary); padding: 8px; border-radius: 6px; margin-top: 8px;">
+                        <p style="font-size: 12px; color: var(--text-muted); margin: 0;">📖 <strong>Breadth</strong> = Are most stocks going up, or just a few? Positive breadth = broad rally (healthy). Negative = narrow rally (risky).</p>
+                    </div>
                 </div>
             </div>
             
-            <p class="summary-text" style="margin-top: 16px; color: var(--text-muted);">Last updated: ${new Date().toLocaleTimeString('en-IN')}</p>
+            <p style="text-align: center; margin-top: 16px; color: var(--text-muted); font-size: 12px;">Last updated: ${new Date().toLocaleTimeString('en-IN')}</p>
         </div>`;
 
         container.innerHTML = html;
 
     } catch (e) {
-        container.innerHTML = `<div class="empty-state"><span style="font-size:48px">❌</span><p>Error: ${e.message}</p></div>`;
+        container.innerHTML = `<div class="empty-state"><span style="font-size:48px">❌</span><p>Error: ${e.message}</p><p style="color: var(--text-muted); font-size: 12px; margin-top: 8px;">Market mood data may be temporarily unavailable. Try refreshing.</p></div>`;
+    }
+}
+
+// ===== Demo Con-Call Analysis =====
+function showDemoConcallAnalysis() {
+    const container = document.getElementById('concallResults');
+    container.innerHTML = `
+    <div class="concall-results" style="animation: fadeIn 0.4s ease;">
+        <div style="background: linear-gradient(135deg, rgba(139,92,246,0.1), rgba(99,102,241,0.1)); border: 1px solid rgba(139,92,246,0.3); border-radius: 16px; padding: 16px 20px; margin-bottom: 20px;">
+            <p style="margin: 0; font-size: 13px; color: var(--text-secondary);">📋 <strong>Sample Analysis</strong> — This is a demo using pre-analyzed data from a real con-call. Upload your own PDF to get a custom analysis.</p>
+        </div>
+        
+        <div class="settings-card">
+            <h4>📊 Earnings Call Analysis — Infosys Q3 FY25</h4>
+            <p style="color: var(--text-muted);">Analyzed 45,230 characters from transcript</p>
+        </div>
+        
+        <div class="settings-card" style="border-left: 3px solid #22c55e;">
+            <h4>🚀 Growth Drivers</h4>
+            <div style="background: var(--bg-tertiary); padding: 8px; border-radius: 6px; margin-bottom: 8px;">
+                <p style="font-size: 12px; color: var(--text-muted); margin: 0;">📖 <strong>What are Growth Drivers?</strong> These are the positive factors fueling the company's growth. More drivers = more potential upside.</p>
+            </div>
+            <ul>
+                <li>Large deal wins of $3.2B in Q3, highest in 8 quarters — indicates strong client confidence</li>
+                <li>AI-led revenue growing at 45% YoY — well-positioned for the AI transformation wave</li>
+                <li>Margin expansion of 80bps driven by pyramid optimization and automation</li>
+                <li>European market showing recovery with 12% QoQ growth in financial services vertical</li>
+                <li>Cloud migration pipeline remains robust at $1.8B — recurring revenue visibility</li>
+            </ul>
+        </div>
+        
+        <div class="settings-card" style="border-left: 3px solid #f59e0b;">
+            <h4>⚠️ Headwinds & Risks</h4>
+            <div style="background: var(--bg-tertiary); padding: 8px; border-radius: 6px; margin-bottom: 8px;">
+                <p style="font-size: 12px; color: var(--text-muted); margin: 0;">📖 <strong>What are Headwinds?</strong> These are challenges or risks that could slow the company's growth. More headwinds = more caution needed.</p>
+            </div>
+            <ul>
+                <li>Retail & CPG vertical declined 5% — discretionary spending under pressure</li>
+                <li>Visa delays impacting onsite delivery in North America</li>
+                <li>Currency headwinds from strong USD may impact reported margins by 40-60bps</li>
+                <li>Rising subcontracting costs partially offsetting operational improvements</li>
+            </ul>
+        </div>
+        
+        <div class="settings-card" style="border-left: 3px solid #ef4444;">
+            <h4>🔍 Management Integrity Check</h4>
+            <div style="background: var(--bg-tertiary); padding: 8px; border-radius: 6px; margin-bottom: 8px;">
+                <p style="font-size: 12px; color: var(--text-muted); margin: 0;">📖 <strong>What is this?</strong> We check if management is being transparent. Warning signs include vague answers, deflecting tough questions, or changing metrics to look better.</p>
+            </div>
+            <ul>
+                <li>✅ Management provided specific numbers for deal pipeline and AI revenue — transparent</li>
+                <li>✅ Guidance maintained at 4-7% in constant currency — no sudden revisions</li>
+                <li>⚠️ Attrition question was answered vaguely — "we're comfortable with current levels"</li>
+                <li>✅ CEO directly addressed margin concerns with specific cost levers</li>
+            </ul>
+        </div>
+        
+        <div class="settings-card" style="border-left: 3px solid var(--accent-primary);">
+            <h4>📝 Analyst Summary</h4>
+            <p>Overall, Infosys demonstrated strong execution with record deal wins and improving margins. The AI services segment is a significant growth lever. Key risks are confined to select verticals (Retail) and macro factors (currency). Management appears transparent with specific guidance. <strong>Verdict:</strong> Positive outlook for medium-term investors.</p>
+        </div>
+    </div>`;
+    showToast('Sample analysis loaded! Upload your own PDF for custom results.', 'info');
+}
+
+// ===== Smart Search Chip Handler =====
+function fillAndSendAiChat(query) {
+    const input = document.getElementById('aiChatInput');
+    if (input) {
+        input.value = query;
+        sendAiChat();
+        // Hide chips after use
+        const chips = document.getElementById('aiQueryChips');
+        if (chips) chips.style.display = 'none';
     }
 }
 

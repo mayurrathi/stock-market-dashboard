@@ -471,8 +471,29 @@
                     <div class="header-main-group">
                         <h3>📋 Stock Screener</h3>
                         <span class="screen-count" id="screenCount">50+ Screens</span>
+                        <button class="btn btn-secondary" id="openGlossaryBtn"
+                            style="margin-left: 12px; font-size: 12px; padding: 6px 14px;">📖 Learn Indicators</button>
                     </div>
                     <button class="btn btn-primary" id="runConsolidatedBtn">🔥 Scan All Screens</button>
+                </div>
+
+                <!-- Indicator Glossary Modal -->
+                <div class="modal hidden" id="glossaryModal">
+                    <div class="modal-content" style="max-width: 680px; max-height: 85vh; overflow-y: auto;">
+                        <div
+                            style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                            <h3 style="margin: 0;">📖 Stock Market Indicator Guide</h3>
+                            <button class="btn btn-secondary" id="closeGlossaryBtn"
+                                style="font-size: 18px; padding: 4px 12px;">✕</button>
+                        </div>
+                        <p style="color: var(--text-muted); font-size: 13px; margin-bottom: 20px; line-height: 1.5;">
+                            New to stock markets? These are the most important numbers to understand before investing.
+                            <strong>Hover over any colored metric</strong> in screener results to see its explanation.
+                        </p>
+                        <div id="glossaryContent" style="display: grid; gap: 16px;">
+                            <!-- Populated by JS -->
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Strategy Recommendation Banner -->
@@ -489,6 +510,20 @@
                         <span>Pure "Value" screens often catch declining businesses. Pure "Growth" screens often catch
                             overpriced stocks. PEG and GARP find the sweet spot.</span>
                     </div>
+                </div>
+
+                <!-- Category Filter Tabs -->
+                <div class="screener-category-tabs" id="screenerCategoryTabs"
+                    style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px;">
+                    <button class="category-tab-btn active" data-category="all">All</button>
+                    <button class="category-tab-btn" data-category="Value">💰 Value</button>
+                    <button class="category-tab-btn" data-category="Growth">📈 Growth</button>
+                    <button class="category-tab-btn" data-category="Quality">💎 Quality</button>
+                    <button class="category-tab-btn" data-category="Technical">📊 Technical</button>
+                    <button class="category-tab-btn" data-category="Thematic">🏛️ Thematic</button>
+                    <button class="category-tab-btn" data-category="Safety">🛡️ Safety</button>
+                    <button class="category-tab-btn beginner-filter" data-category="beginner">🌱 Beginner
+                        Friendly</button>
                 </div>
 
                 <!-- View Toggle -->
@@ -1111,16 +1146,59 @@
                     <div class="header-main-group">
                         <h3>🔍 Pattern Scout</h3>
                         <p style="color: var(--text-muted); margin: 4px 0 0 0; font-size: 13px;">Technical pattern
-                            recognition inspired by StockEdge</p>
+                            recognition — find the best time to buy or sell</p>
                     </div>
                 </div>
+
+                <!-- Beginner Explainer -->
+                <div class="quant-explainer-banner">
+                    <div class="explainer-icon">🌱</div>
+                    <div class="explainer-content">
+                        <h4>What is Pattern Scout?</h4>
+                        <p>Think of it like a <strong>weather report for stocks</strong>. Just like clouds predict rain,
+                            certain price patterns predict whether a stock might go up or down. Pattern Scout checks 3
+                            things for you:</p>
+                        <div class="explainer-pills">
+                            <span class="explainer-pill">📊 <strong>Relative Strength</strong> — Is this stock beating
+                                the market?</span>
+                            <span class="explainer-pill">📈 <strong>Momentum (RSI)</strong> — Is it overbought or
+                                oversold?</span>
+                            <span class="explainer-pill">🔀 <strong>Trend (MACD)</strong> — Is the trend changing
+                                direction?</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Quick Try Buttons -->
+                <div style="margin-bottom: 16px;">
+                    <span style="color: var(--text-muted); font-size: 12px; margin-right: 8px;">Quick try:</span>
+                    <div class="quick-try-chips">
+                        <button class="quick-chip"
+                            onclick="document.getElementById('patternScoutInput').value='RELIANCE'; analyzePatterns('RELIANCE')">RELIANCE</button>
+                        <button class="quick-chip"
+                            onclick="document.getElementById('patternScoutInput').value='TCS'; analyzePatterns('TCS')">TCS</button>
+                        <button class="quick-chip"
+                            onclick="document.getElementById('patternScoutInput').value='INFY'; analyzePatterns('INFY')">INFY</button>
+                        <button class="quick-chip"
+                            onclick="document.getElementById('patternScoutInput').value='HDFCBANK'; analyzePatterns('HDFCBANK')">HDFC
+                            Bank</button>
+                        <button class="quick-chip"
+                            onclick="document.getElementById('patternScoutInput').value='TATASTEEL'; analyzePatterns('TATASTEEL')">Tata
+                            Steel</button>
+                        <button class="quick-chip"
+                            onclick="document.getElementById('patternScoutInput').value='ITC'; analyzePatterns('ITC')">ITC</button>
+                    </div>
+                </div>
+
                 <div class="search-bar" style="margin-bottom: 24px;">
                     <input type="text" id="patternScoutInput" placeholder="Enter stock symbol (e.g., TATASTEEL)">
-                    <button class="btn btn-primary" id="patternScoutBtn">Analyze Patterns</button>
+                    <button class="btn btn-primary" id="patternScoutBtn">🔍 Analyze Patterns</button>
                 </div>
                 <div id="patternScoutResults" class="empty-state">
                     <span style="font-size: 48px;">📊</span>
-                    <p>Enter a stock symbol to analyze technical patterns</p>
+                    <p>Pick a stock above or type a symbol to see its technical patterns</p>
+                    <p style="font-size: 12px; color: var(--text-muted); margin-top: 8px;">💡 Tip: Start with a stock
+                        you already own or follow</p>
                 </div>
             </section>
 
@@ -1129,17 +1207,61 @@
                 <div class="section-header">
                     <div class="header-main-group">
                         <h3>📊 QVM Engine</h3>
-                        <p style="color: var(--text-muted); margin: 4px 0 0 0; font-size: 13px;">
-                            Quality-Valuation-Momentum scoring inspired by Trendlyne</p>
+                        <p style="color: var(--text-muted); margin: 4px 0 0 0; font-size: 13px;">Quality · Valuation ·
+                            Momentum — the 3 pillars of smart investing</p>
                     </div>
                 </div>
+
+                <!-- Beginner Explainer -->
+                <div class="quant-explainer-banner">
+                    <div class="explainer-icon">🎯</div>
+                    <div class="explainer-content">
+                        <h4>What is QVM?</h4>
+                        <p>QVM checks every stock on <strong>3 simple questions</strong> and gives a score out of 10 for
+                            each:</p>
+                        <div class="explainer-pills">
+                            <span class="explainer-pill">✨ <strong>Quality</strong> — Is this a well-run company? (ROE,
+                                low debt)</span>
+                            <span class="explainer-pill">💰 <strong>Valuation</strong> — Is the stock priced fairly?
+                                (P/E, P/B ratios)</span>
+                            <span class="explainer-pill">🚀 <strong>Momentum</strong> — Is the stock trending up? (Price
+                                vs averages)</span>
+                        </div>
+                        <p style="margin-top: 8px; font-size: 12px; color: var(--text-muted);">💡 A score above 70/100
+                            overall means the stock is worth considering. Above 80 is excellent!</p>
+                    </div>
+                </div>
+
+                <!-- Quick Try Buttons -->
+                <div style="margin-bottom: 16px;">
+                    <span style="color: var(--text-muted); font-size: 12px; margin-right: 8px;">Quick try:</span>
+                    <div class="quick-try-chips">
+                        <button class="quick-chip"
+                            onclick="document.getElementById('qvmInput').value='RELIANCE'; analyzeQvm('RELIANCE')">RELIANCE</button>
+                        <button class="quick-chip"
+                            onclick="document.getElementById('qvmInput').value='TCS'; analyzeQvm('TCS')">TCS</button>
+                        <button class="quick-chip"
+                            onclick="document.getElementById('qvmInput').value='INFY'; analyzeQvm('INFY')">INFY</button>
+                        <button class="quick-chip"
+                            onclick="document.getElementById('qvmInput').value='HDFCBANK'; analyzeQvm('HDFCBANK')">HDFC
+                            Bank</button>
+                        <button class="quick-chip"
+                            onclick="document.getElementById('qvmInput').value='BAJFINANCE'; analyzeQvm('BAJFINANCE')">Bajaj
+                            Finance</button>
+                        <button class="quick-chip"
+                            onclick="document.getElementById('qvmInput').value='WIPRO'; analyzeQvm('WIPRO')">Wipro</button>
+                    </div>
+                </div>
+
                 <div class="search-bar" style="margin-bottom: 24px;">
                     <input type="text" id="qvmInput" placeholder="Enter stock symbol (e.g., RELIANCE)">
-                    <button class="btn btn-primary" id="qvmAnalyzeBtn">Analyze QVM</button>
+                    <button class="btn btn-primary" id="qvmAnalyzeBtn">📊 Analyze QVM</button>
                 </div>
                 <div id="qvmResults" class="empty-state">
                     <span style="font-size: 48px;">📈</span>
-                    <p>Enter a stock symbol to get Quality, Valuation & Momentum scores</p>
+                    <p>Pick a stock above or type a symbol to get Quality, Valuation & Momentum scores</p>
+                    <p style="font-size: 12px; color: var(--text-muted); margin-top: 8px;">💡 Tip: Compare 2-3 similar
+                        companies to find the winner</p>
                 </div>
             </section>
 
@@ -1148,19 +1270,53 @@
                 <div class="section-header">
                     <div class="header-main-group">
                         <h3>📄 Con-Call Analyst</h3>
-                        <p style="color: var(--text-muted); margin: 4px 0 0 0; font-size: 13px;">AI-powered earnings
-                            call analysis inspired by NotebookLM</p>
+                        <p style="color: var(--text-muted); margin: 4px 0 0 0; font-size: 13px;">AI reads earnings calls
+                            so you don't have to</p>
                     </div>
                 </div>
-                <div class="settings-card" style="max-width: 600px;">
-                    <h4>Upload Earnings Call Transcript or Annual Report</h4>
-                    <p style="color: var(--text-muted); margin-bottom: 16px;">Upload a PDF file to analyze. AI will
-                        extract Growth Drivers, Headwinds, and Red Flags.</p>
-                    <div class="form-group">
-                        <input type="file" id="concallFileInput" accept=".pdf" style="margin-bottom: 12px;">
+
+                <!-- Beginner Explainer -->
+                <div class="quant-explainer-banner">
+                    <div class="explainer-icon">📞</div>
+                    <div class="explainer-content">
+                        <h4>What is a Con-Call?</h4>
+                        <p>Every quarter, company leaders hold a <strong>conference call</strong> (con-call) where they
+                            discuss how the business is doing. These calls are goldmines of information but are 50-100
+                            pages long! Our AI reads the whole thing and extracts:</p>
+                        <div class="explainer-pills">
+                            <span class="explainer-pill">🚀 <strong>Growth Drivers</strong> — What's going well for the
+                                company</span>
+                            <span class="explainer-pill">⚠️ <strong>Headwinds</strong> — Problems or risks ahead</span>
+                            <span class="explainer-pill">🔍 <strong>Red Flags</strong> — Signs that management might be
+                                hiding bad news</span>
+                        </div>
                     </div>
-                    <button class="btn btn-primary" id="concallAnalyzeBtn">🔬 Analyze with AI</button>
-                    <p id="concallStatus" style="color: var(--text-muted); margin-top: 8px;"></p>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 16px;">
+                    <!-- Upload Card -->
+                    <div class="settings-card">
+                        <h4>📤 Upload Transcript</h4>
+                        <p style="color: var(--text-muted); margin-bottom: 16px; font-size: 13px;">Upload a con-call PDF
+                            from BSE/NSE. AI will analyze it in 30-60 seconds.</p>
+                        <div class="form-group">
+                            <input type="file" id="concallFileInput" accept=".pdf" style="margin-bottom: 12px;">
+                        </div>
+                        <button class="btn btn-primary" id="concallAnalyzeBtn">🔬 Analyze with AI</button>
+                        <p id="concallStatus" style="color: var(--text-muted); margin-top: 8px; font-size: 12px;"></p>
+                    </div>
+
+                    <!-- Example / Demo Card -->
+                    <div class="settings-card" style="border-color: rgba(139, 92, 246, 0.3);">
+                        <h4>👀 See Example Analysis</h4>
+                        <p style="color: var(--text-muted); margin-bottom: 16px; font-size: 13px;">Not sure what to
+                            expect? See a sample analysis of a real con-call to understand the output.</p>
+                        <button class="btn btn-primary" onclick="showDemoConcallAnalysis()"
+                            style="background: linear-gradient(135deg, #8b5cf6, #6366f1);">📋 Show Sample
+                            Analysis</button>
+                        <p style="color: var(--text-muted); margin-top: 8px; font-size: 11px;">✨ No AI key required —
+                            uses pre-analyzed data</p>
+                    </div>
                 </div>
                 <div id="concallResults" style="margin-top: 24px;"></div>
             </section>
@@ -1170,11 +1326,32 @@
                 <div class="section-header">
                     <div class="header-main-group">
                         <h3>🌡️ Market Mood</h3>
-                        <p style="color: var(--text-muted); margin: 4px 0 0 0; font-size: 13px;">Fear & Greed Index
-                            inspired by Tickertape MMI</p>
+                        <p style="color: var(--text-muted); margin: 4px 0 0 0; font-size: 13px;">Fear & Greed Index —
+                            should you buy, hold, or wait?</p>
                     </div>
                     <button class="btn btn-icon-round refresh-btn" onclick="loadMarketMood()">🔄</button>
                 </div>
+
+                <!-- Beginner Explainer -->
+                <div class="quant-explainer-banner">
+                    <div class="explainer-icon">🧠</div>
+                    <div class="explainer-content">
+                        <h4>What is Market Mood?</h4>
+                        <p>The market swings between <strong style="color: #ef4444;">Fear</strong> (everyone panic
+                            sells) and <strong style="color: #22c55e;">Greed</strong> (everyone buys blindly). The
+                            smartest strategy? <strong>Buy when others are fearful, be cautious when others are
+                                greedy.</strong></p>
+                        <div class="explainer-pills">
+                            <span class="explainer-pill" style="border-color: rgba(239,68,68,0.3);">😰 <strong>0-25:
+                                    Extreme Fear</strong> — Great time to buy quality stocks at a discount</span>
+                            <span class="explainer-pill" style="border-color: rgba(245,158,11,0.3);">😐 <strong>40-60:
+                                    Neutral</strong> — Market is balanced, follow fundamentals</span>
+                            <span class="explainer-pill" style="border-color: rgba(34,197,94,0.3);">🤑 <strong>75-100:
+                                    Extreme Greed</strong> — Be cautious, prices may be inflated</span>
+                        </div>
+                    </div>
+                </div>
+
                 <div id="marketMoodContent" class="empty-state">
                     <span class="loading"></span>
                     <p>Loading market mood data...</p>
@@ -1334,6 +1511,20 @@
                                 style="background: var(--bg-secondary); padding: 10px 14px; border-radius: 8px; margin: 0; font-size: 14px;">
                                 Ask me anything about stocks, get analysis, or request specific recommendations!</p>
                         </div>
+                    </div>
+                    <!-- Example Query Chips -->
+                    <div class="quick-try-chips" style="margin-bottom: 12px;" id="aiQueryChips">
+                        <button class="quick-chip" onclick="fillAndSendAiChat('Is RELIANCE a good buy right now?')">Is
+                            RELIANCE a good buy?</button>
+                        <button class="quick-chip" onclick="fillAndSendAiChat('Best stocks under ₹500')">Best stocks
+                            under ₹500</button>
+                        <button class="quick-chip" onclick="fillAndSendAiChat('Compare TCS vs INFY')">Compare TCS vs
+                            INFY</button>
+                        <button class="quick-chip"
+                            onclick="fillAndSendAiChat('Top dividend paying stocks in India')">Top dividend
+                            stocks</button>
+                        <button class="quick-chip" onclick="fillAndSendAiChat('Explain what P/E ratio means')">What is
+                            P/E ratio?</button>
                     </div>
                     <div style="display: flex; gap: 12px;">
                         <input type="text" id="aiChatInput"
